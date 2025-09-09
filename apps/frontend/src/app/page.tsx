@@ -205,9 +205,10 @@ ${result.is_splunk_related
   : '❌ This query doesn\'t appear to be related to Splunk. Try general chat instead.'}`;
 
       const assistantMessage: Message = {
+        id: Date.now().toString() + '-relevance-response',
         content: response,
         sender: 'assistant',
-        timestamp: new Date().toISOString()
+        timestamp: new Date()
       };
 
       setMessages(prev => [...prev, assistantMessage]);
