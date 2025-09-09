@@ -1,0 +1,160 @@
+[
+  {
+    "company_name": "HealthPlus",
+    "product_name": "win_server",
+    "index": "HealthPlus_win",
+    "sourcetype": "WinEventLog",
+    "data_model": ["Authentication", "Change", "IDS", "Service"]
+  },
+  {
+    "company_name": "HealthPlus",
+    "product_name": "linux_server",
+    "index": "HealthPlus_linux",
+    "sourcetype": "syslog",
+    "data_model": ["Authentication", "Change"]
+  },
+  {
+    "company_name": "HealthPlus",
+    "product_name": "linux_server",
+    "index": "HealthPlus_linux",
+    "sourcetype": "linux_secure",
+    "data_model": ["Authentication", "Change", "IDS"]
+  },
+  {
+    "company_name": "HealthPlus",
+    "product_name": "linux_server",
+    "index": "HealthPlus_linux",
+    "sourcetype": "linux_syslog",
+    "data_model": ["Change"]
+  },
+
+  {
+    "company_name": "FinServe",
+    "product_name": "win_server",
+    "index": "FinServe_win",
+    "sourcetype": "WinEventLog",
+    "data_model": ["Authentication", "Change", "IDS", "Service"]
+  },
+  {
+    "company_name": "FinServe",
+    "product_name": "linux_server",
+    "index": "FinServe_linux",
+    "sourcetype": "syslog",
+    "data_model": ["Authentication", "Change"]
+  },
+  {
+    "company_name": "FinServe",
+    "product_name": "linux_server",
+    "index": "FinServe_linux",
+    "sourcetype": "linux_secure",
+    "data_model": ["Authentication", "Change", "IDS"]
+  },
+  {
+    "company_name": "FinServe",
+    "product_name": "linux_server",
+    "index": "FinServe_linux",
+    "sourcetype": "linux_syslog",
+    "data_model": ["Authentication"]
+  },
+
+  {
+    "company_name": "GreenEnergy",
+    "product_name": "win_server",
+    "index": "GreenEnergy_win",
+    "sourcetype": "WinEventLog",
+    "data_model": ["Authentication", "Change", "IDS", "Service"]
+  },
+  {
+    "company_name": "GreenEnergy",
+    "product_name": "linux_server",
+    "index": "GreenEnergy_linux",
+    "sourcetype": "syslog",
+    "data_model": ["Authentication", "Change"]
+  },
+  {
+    "company_name": "GreenEnergy",
+    "product_name": "linux_server",
+    "index": "GreenEnergy_linux",
+    "sourcetype": "linux_secure",
+    "data_model": ["Authentication", "Change", "IDS"]
+  },
+  {
+    "company_name": "GreenEnergy",
+    "product_name": "linux_server",
+    "index": "GreenEnergy_linux",
+    "sourcetype": "linux_syslog",
+    "data_model": ["Change"]
+  },
+
+  {
+    "company_name": "EduSmart",
+    "product_name": "win_server",
+    "index": "EduSmart_win",
+    "sourcetype": "WinEventLog",
+    "data_model": ["Authentication", "Change", "IDS", "Service"]
+  },
+  {
+    "company_name": "EduSmart",
+    "product_name": "linux_server",
+    "index": "EduSmart_linux",
+    "sourcetype": "syslog",
+    "data_model": ["Authentication", "Change"]
+  },
+  {
+    "company_name": "EduSmart",
+    "product_name": "linux_server",
+    "index": "EduSmart_linux",
+    "sourcetype": "linux_secure",
+    "data_model": ["Authentication", "Change", "IDS"]
+  },
+  {
+    "company_name": "EduSmart",
+    "product_name": "linux_server",
+    "index": "EduSmart_linux",
+    "sourcetype": "linux_syslog",
+    "data_model": ["Authentication"]
+  },
+
+  {
+    "company_name": "SafeBank",
+    "product_name": "win_server",
+    "index": "SafeBank_win",
+    "sourcetype": "WinEventLog",
+    "data_model": ["Authentication", "Change", "IDS", "Service"]
+  },
+  {
+    "company_name": "SafeBank",
+    "product_name": "linux_server",
+    "index": "SafeBank_linux",
+    "sourcetype": "syslog",
+    "data_model": ["Authentication", "Change"]
+  },
+  {
+    "company_name": "SafeBank",
+    "product_name": "linux_server",
+    "index": "SafeBank_linux",
+    "sourcetype": "linux_secure",
+    "data_model": ["Authentication", "Change", "IDS"]
+  },
+  {
+    "company_name": "SafeBank",
+    "product_name": "linux_server",
+    "index": "SafeBank_linux",
+    "sourcetype": "linux_syslog",
+    "data_model": ["Change"]
+  },
+  {
+  "company_name": "TechNova",
+  "product_name": "win_server",
+  "index": "TechNova_win",
+  "sourcetype": "WinEventLog",
+  "data_model": ["Authentication", "Change", "IDS", "Service"]
+  },
+  {
+  "company_name": "AirLogix",
+  "product_name": "win_server",
+  "index": "AirLogix_win",
+  "sourcetype": "WinEventLog",
+  "data_model": ["Authentication", "Change", "IDS", "Service"]
+  }
+]

@@ -1,0 +1,199 @@
+[
+  {
+    "question": "For EduSmart, show all failed logins in the last 24 hours",
+    "answer": "index=EduSmart_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| eval action=case(\n    EventCode=4625, \"failure\",\n    match(_raw,\"Failed password|authentication failure|logon failure\"), \"failure\",\n    true(), \"other\"\n  )\n| search action=failure AND isnotnull(user) AND isnotnull(src)\n| bin _time span=1h\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For TechNova, show me all failed logins from the past day",
+    "answer": "index=TechNova_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| eval action=case(EventCode=4625, \"failure\", match(_raw, \"Failed password|authentication failure|logon failure\"), \"failure\", true(), \"other\")\n| search action=failure AND isnotnull(user) AND isnotnull(src)\n| bin _time span=1h\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For HealthPlus, show all successful logins in the last 24 hours",
+    "answer": "index=HealthPlus_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| search EventCode=4624 OR match(_raw, \"Accepted password|session opened\")\n| bin _time span=1h\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For SafeBank, can you show me all successful logins in the past 24 hours?",
+    "answer": "index=SafeBank_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| search EventCode=4624 OR match(_raw, \"Accepted password|session opened\")\n| bin _time span=1h\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For SafeBank, show daily failed login attempts in the last 7 days",
+    "answer": "index=SafeBank_win sourcetype=WinEventLog earliest=-7d\n| eval action=case(EventCode=4625, \"failure\", match(_raw, \"Failed password|authentication failure|logon failure\"), \"failure\", true(), \"other\")\n| search action=failure\n| bin _time span=1d\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For FinServe, I need to see daily failed login attempts for the past week",
+    "answer": "index=FinServe_win sourcetype=WinEventLog earliest=-7d\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| eval action=case(EventCode=4625, \"failure\", match(_raw, \"Failed password|authentication failure|logon failure\"), \"failure\", true(), \"other\")\n| search action=failure\n| bin _time span=1d\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For EduSmart, show top 10 source IPs with failed logins in the past 24 hours",
+    "answer": "index=EduSmart_win sourcetype=WinEventLog earliest=-24h\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| search EventCode=4625 OR match(_raw, \"Failed password|authentication failure|logon failure\")\n| stats count by src\n| sort - count\n| head 10"
+  },
+  {
+    "question": "For AirLogix, what are the top 10 source IPs with failed login attempts in the last day?",
+    "answer": "index=AirLogix_win sourcetype=WinEventLog earliest=-24h\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| search EventCode=4625 OR match(_raw, \"Failed password|authentication failure|logon failure\")\n| stats count by src\n| sort - count\n| head 10"
+  },
+  {
+    "question": "For HealthPlus, show all password change events in the last 7 days",
+    "answer": "index=HealthPlus_win (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-7d\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| search EventCode=4723 OR EventCode=4724 OR \"password changed\" OR \"passwd\"\n| bin _time span=1d\n| stats count by _time user host\n| sort - _time"
+  },
+  {
+    "question": "For GreenEnergy, show me all password changes from the past week",
+    "answer": "index=GreenEnergy_win (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-7d\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| search EventCode=4723 OR EventCode=4724 OR \"password changed\" OR \"passwd\"\n| bin _time span=1d\n| stats count by _time user host\n| sort - _time"
+  },
+
+  {
+    "question": "For HealthPlus, show all service start/stop events on Windows hosts in the last 24 hours",
+    "answer": "index=HealthPlus_win sourcetype=WinEventLog earliest=-24h\n| search service=\"start\" OR service=\"stop\" \n| eval svc=coalesce(ServiceName, service, process, ImagePath)\n| bin _time span=1h\n| stats count by _time host svc\n| sort - _time"
+  },
+  {
+    "question": "For HealthPlus, show brute force attempts with more than 10 failed logins in 15 minutes in the last 24 hours",
+    "answer": "index=HealthPlus_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| search EventCode=4625 OR match(_raw, \"Failed password|authentication failure|logon failure\")\n| bin _time span=15m\n| stats count by _time user src\n| where count>=10\n| sort - count"
+  },
+  {
+    "question": "For TechNova, can you identify potential brute force attacks with 10+ failed logins within 15 minutes during the past day?",
+    "answer": "index=TechNova_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| search EventCode=4625 OR match(_raw, \"Failed password|authentication failure|logon failure\")\n| bin _time span=15m\n| stats count by _time user src\n| where count>=10\n| sort - count"
+  },
+  {
+    "question": "For EduSmart, show VPN logins outside business hours (20:00–06:00) in the last 7 days",
+    "answer": "index=EduSmart_linux (sourcetype=syslog OR sourcetype=linux_secure OR sourcetype=linux_syslog) earliest=-7d\n| eval user=coalesce(User, user, src_user, dest_user)\n| eval hour=strftime(_time, \"%H\")\n| where tonumber(hour) < 6 OR tonumber(hour) >= 20\n| stats count by _time user src host\n| sort - _time"
+  },
+  {
+    "question": "For SafeBank, show me VPN logins that happened outside of business hours (8PM-6AM) in the last week",
+    "answer": "index=SafeBank_win sourcetype=WinEventLog earliest=-7d\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address)\n| search \"VPN\" OR \"Virtual Private Network\"\n| eval hour=strftime(_time, \"%H\")\n| where tonumber(hour) < 6 OR tonumber(hour) >= 20\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For SafeBank, show daily authentication summary by user for the last 7 days",
+    "answer": "index=SafeBank_win (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-7d\n| eval action=case(EventCode=4624, \"success\", EventCode=4625, \"failure\", match(_raw,\"Failed password\"),\"failure\", true(),\"other\")\n| where action!=\"other\"\n| bin _time span=1d\n| stats count by _time user action\n| sort - _time"
+  },
+  {
+    "question": "For EduSmart, I need a daily summary of authentication activity by user for the past week",
+    "answer": "index=EduSmart_win (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog) earliest=-7d\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval action=case(EventCode=4624, \"success\", EventCode=4625, \"failure\", match(_raw,\"Failed password\"),\"failure\", true(),\"other\")\n| where action!=\"other\"\n| bin _time span=1d\n| stats count by _time user action\n| sort - _time"
+  },
+  {
+    "question": "For GreenEnergy, show Linux sudo authentication attempts in the last 24 hours",
+    "answer": "index=GreenEnergy_linux sourcetype=linux_secure earliest=-24h\n| eval user=coalesce(User, user, account, dest_user)\n| search \"sudo\" OR \"pam_unix\"\n| stats count by user host\n| sort - count"
+  },
+  {
+    "question": "Could you show me all sudo authentication attempts on Linux systems in the past day?",
+    "answer": "index=GreenEnergy_linux sourcetype=linux_secure earliest=-24h\n| eval user=coalesce(User, user, account, dest_user)\n| search \"sudo\" OR \"pam_unix\"\n| stats count by user host action\n| sort - count"
+  },
+  {
+    "question": "For TechNova, show all failed logins in the last 24 hours",
+    "answer": "index=TechNova_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| eval action=case(EventCode=4625, \"failure\", match(_raw, \"logon failure|Failure Reason\"), \"failure\", true(), \"other\")\n| search action=failure AND isnotnull(user) AND isnotnull(src)\n| bin _time span=1h\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For TechNova, show me all failed login attempts from the past 24 hours",
+    "answer": "index=TechNova_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| eval action=case(EventCode=4625, \"failure\", match(_raw, \"logon failure|Failure Reason\"), \"failure\", true(), \"other\")\n| search action=failure AND isnotnull(user) AND isnotnull(src)\n| bin _time span=1h\n| stats count by _time user src\n| sort - _time"
+  },
+  {
+    "question": "For FinServe, summarize daily auth success vs failure for the last 7 days",
+    "answer": "index=FinServe_win sourcetype=WinEventLog earliest=-7d\n| eval action=case(EventCode=4624, \"success\", EventCode=4625, \"failure\", true(), \"other\")\n| where action!=\"other\"\n| bin _time span=1d\n| stats count by _time action index sourcetype\n| sort - _time"
+  },
+  {
+    "question": "For FinServe, give me a daily summary comparing successful and failed authentications over the past week",
+    "answer": "index=FinServe_win sourcetype=WinEventLog earliest=-7d\n| eval action=case(EventCode=4624, \"success\", EventCode=4625, \"failure\", true(), \"other\")\n| where action!=\"other\"\n| bin _time span=1d\n| stats count by _time action\n| sort - _time"
+  },
+  {
+    "question": "For GreenEnergy, find top source IPs with login failures in the past 1 hour",
+    "answer": "index=GreenEnergy_win sourcetype=WinEventLog earliest=-1h\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| where EventCode=4625 OR match(_raw, \"logon failure|Failure Reason\")\n| stats count by src\n| sort - count\n| head 10"
+  },
+  {
+    "question": "For GreenEnergy, identify potential brute force attacks where there were 10 or more failures within 15 minutes in the past day",
+    "answer": "index=GreenEnergy_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| search EventCode=4625 OR match(_raw, \"Failed password|authentication failure|logon failure\")\n| bin _time span=15m\n| stats count by _time user src\n| where count>=10\n| sort - count"
+  },
+  {
+    "question": "For AirLogix, show Windows service start/stop events in the last 24 hours",
+    "answer": "index=AirLogix_win sourcetype=WinEventLog earliest=-24h\n| search (\"service\" AND (\"start\" OR \"stop\"))\n| eval svc=coalesce(ServiceName, service, process, ImagePath)\n| bin _time span=1h\n| stats count by _time host svc\n| sort - _time"
+  },
+  {
+    "question": "Show me all failed login attempts for the admin user at AirLogix",
+    "answer": "index=AirLogix_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| search user=\"admin\" AND (EventCode=4625 OR match(_raw, \"Failed password|authentication failure|logon failure\"))\n| stats count by src user\n| sort - count"
+  },
+  {
+    "question": "Find all network connections to external IPs from FinServe systems in the past day",
+    "answer": "index=FinServe_win sourcetype=WinEventLog earliest=-24h\n| where dest_port!=0 \n| stats count by src_ip, dest_ip, dest_port, transport\n| sort - count"
+  },
+  {
+    "question": "For GreenEnergy, can you find all registry changes made in the past hour?",
+    "answer": "index=GreenEnergy_win sourcetype=WinEventLog earliest=-1h\n| search EventCode=4657 OR EventCode=4663 OR \"RegSetValue\"\n| eval registry_key=coalesce(Object_Name, ObjectName, registry_key_name)\n| eval process=coalesce(Process_Name, ProcessName, process_name)\n| table _time registry_key registry_value_name action process\n| sort - _time"
+  },
+  {
+    "question": "For AirLogix, identify potential intrusion attempts in the past 24 hours",
+    "answer": "index=AirLogix_win sourcetype=WinEventLog earliest=-24h\n| search Priority=1 OR Priority=high OR Severity=critical OR \"intrusion\" OR \"attack\" OR \"exploit\"\n| eval signature=coalesce(signature, alert_message, Message)\n| stats count by src_ip, dest_ip, signature\n| sort - count\n| head 20"
+  },
+  {
+    "question": "For AirLogix, can you help me detect any port scanning activity in the past hour using direct index searches?",
+    "answer": "index=AirLogix_win sourcetype=WinEventLog earliest=-1h\n| stats dc(dest_port) as port_count by src_ip \n| where port_count > 15 \n| sort - port_count"
+  },
+  {
+    "question": "Show me Windows PowerShell executions with encoded commands in the last 24 hours",
+    "answer": "index=TechNova_win sourcetype=WinEventLog EventCode=4104 OR EventCode=4103 earliest=-24h\n| regex _raw=\"(?i)encodedcommand|-enc|-e\"\n| table _time host user_id process_name command"
+  },
+  {
+    "question": "For FinServe, show me suspicious PowerShell commands executed in the last 24 hours",
+    "answer": "index=FinServe_win sourcetype=WinEventLog earliest=-24h\n| search EventCode=4104 OR \"powershell.exe\"\n| regex _raw=\"(?i)(invoke-expression|iex|invoke-webrequest|invoke-restmethod|net\\.webclient|downloadstring|downloadfile|bypass|encodedcommand|-enc|-e|hidden|webclient\\.downloadstring|shellcode|mimikatz|SecureString)\"\n| stats count by host, user, _raw\n| sort - count"
+  },
+  {
+    "question": "Find processes creating or modifying scheduled tasks in the past week",
+    "answer": "index=AirLogix_win sourcetype=WinEventLog EventCode=4698 OR EventCode=4702 earliest=-7d\n| eval action=case(EventCode=4698, \"created\", EventCode=4702, \"modified\")\n| stats count by _time, host, user, action, Task_Name\n| sort - _time"
+  },
+  {
+    "question": "For SafeBank, identify failed file access attempts in the past 24 hours",
+    "answer": "index=SafeBank_win sourcetype=WinEventLog earliest=-24h\n| search EventCode=4656 AND Keywords=0x8010000000000000\n| stats count by Object_Name, host, Process_Name, user\n| sort - count"
+  },
+  {
+    "question": "Show me login attempts from unusual countries in the last week",
+    "answer": "index=FinServe_win sourcetype=WinEventLog earliest=-7d\n| lookup geo_attr ip as src_ip\n| search NOT country_code IN (US, CA, GB, TH) AND action=success\n| stats count by country_name, src_ip, user\n| sort - count"
+  },
+  {
+    "question": "For EduSmart, detect traffic to known malicious domains in the past 24 hours",
+    "answer": "index=EduSmart_win (sourcetype=firewall OR sourcetype=stream:http OR sourcetype=pan:traffic OR sourcetype=cisco:asa) earliest=-24h\n| lookup malicious_domains.csv domain as dest_domain OUTPUT is_malicious\n| search is_malicious=1\n| stats count by src_ip, dest_domain, category\n| sort - count"
+  },
+  {
+    "question": "Find USB device insertions across all systems in the last 24 hours",
+    "answer": "index=HealthPlus_win sourcetype=WinEventLog EventCode=2003 OR EventCode=2100 OR \"USB\" earliest=-24h\n| regex _raw=\"(?i)(usb|removable|storage|flash|thumb)\"\n| stats count by _time, host, user, Device_Description\n| sort - _time"
+  },
+  {
+    "question": "For TechNova, identify systems with disabled Windows Defender in the last week",
+    "answer": "index=TechNova_win sourcetype=WinEventLog earliest=-7d\n| search (EventCode=5001 OR EventCode=5025 OR \"Defender disabled\" OR \"protection disabled\")\n| stats latest(_time) as time by host\n| convert ctime(time) as Time\n| sort - time"
+  },
+  {
+    "question": "For TechNova, analyze user login patterns over the last 7 days",
+    "answer": "index=TechNova_win sourcetype=WinEventLog earliest=-7d\n| eval action=case(EventCode=4624, \"success\", EventCode=4625, \"failure\", true(), \"other\")\n| where action!=\"other\"\n| eval hour=strftime(_time, \"%H\")\n| timechart span=1h count by action\n| eval hour=strftime(_time, \"%H\")\n| chart sum(count) by hour, action\n| sort +hour"
+  },
+  {
+    "question": "For FinServe, find unusual service account activity in the last 24 hours",
+    "answer": "index=FinServe_win sourcetype=WinEventLog earliest=-24h\n| eval user=coalesce(User_Name, user, account, dest_user)\n| search user=\"*svc*\" OR user=\"*admin*\" OR user=\"*system*\"\n| eval action=case(EventCode=4624, \"success\", EventCode=4625, \"failure\", true(), \"other\")\n| where action!=\"other\"\n| stats count by user action\n| where count < 3 OR count > 50\n| sort - count"
+  },
+  {
+    "question": "For SafeBank, detect privilege escalation attempts in the last 24 hours",
+    "answer": "index=SafeBank_win sourcetype=WinEventLog earliest=-24h\n| search (EventCode=4672 OR EventCode=4732 OR \"runas\" OR \"sudo\" OR \"UAC\" OR \"User Account Control\" OR \"SeDebugPrivilege\")\n| eval user=coalesce(User_Name, user, account, dest_user)\n| eval command=coalesce(Process_Name, ProcessName, command_name)\n| eval object=coalesce(Object_Name, ObjectName, object_name)\n| table _time user command object\n| sort - _time"
+  },
+  {
+    "question": "For AirLogix, identify top 10 attack signatures in the last week",
+    "answer": "index=AirLogix_win sourcetype=WinEventLog earliest=-7d\n| eval signature=coalesce(signature, alert_message, Message, alert.signature)\n| stats count by signature\n| sort - count\n| head 10\n| table signature count"
+  },
+  {
+    "question": "For EduSmart, analyze changes to critical system files in the last 48 hours",
+    "answer": "index=EduSmart_win (sourcetype=WinEventLog OR sourcetype=fschange OR sourcetype=fs_notification) earliest=-48h\n| search (file_path=\"*/etc/*\" OR file_path=\"*/bin/*\" OR file_path=\"*/boot/*\" OR file_path=\"*\\\\Windows\\\\*\" OR Object_Name=\"*\\\\Windows\\\\*\")\n| eval file_path=coalesce(file_path, Object_Name, filename)\n| eval user=coalesce(user, User_Name, ProcessingUser)\n| eval action=coalesce(action, change_type, EventCode)\n| table _time file_path user action\n| sort - _time"
+  },
+  {
+    "question": "For HealthPlus, track all privileged command executions in the last 3 days",
+    "answer": "index=HealthPlus_win (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog) earliest=-3d\n| search user=administrator OR user=root OR user=admin OR User_Name=administrator OR User_Name=root OR User_Name=admin\n| eval user=coalesce(User_Name, user, account)\n| eval command=coalesce(Process_Name, command, process)\n| eval object=coalesce(Object_Name, object)\n| table _time user command object\n| sort - _time"
+  },
+  {
+    "question": "For GreenEnergy, list services running with high privileges in the last 24 hours",
+    "answer": "index=GreenEnergy_win sourcetype=WinEventLog earliest=-24h\n| search EventCode=7045 OR EventCode=7040 OR \"service\" \n| eval user=coalesce(User_Name, user, account)\n| eval process=coalesce(Service_File_Name, Process_Name, process_name, Image_Path)\n| eval dest=coalesce(dest, host)\n| search user=\"*SYSTEM*\" OR user=\"*admin*\" OR user=\"*root*\"\n| table process dest user\n| sort process"
+  },
+  {
+    "question": "For TechNova, detect suspicious network connections on non-standard ports",
+    "answer": "index=TechNova_win sourcetype=WinEventLog earliest=-24h\n| eval process=coalesce(process_name, Process_Name, process)\n| eval dest_port=coalesce(dest_port, dport)\n| search dest_port!=80 AND dest_port!=443 AND dest_port!=22 AND dest_port!=53 AND dest_port!=123 AND dest_port!=389 AND dest_port!=3389\n| stats count by process dest_port\n| where count < 5\n| sort - count"
+  },
+  {
+    "question": "For FinServe, correlate failed logins with IDS alerts in the last 24 hours",
+    "answer": "index=FinServe_win sourcetype=WinEventLog earliest=-24h latest=now\n| eval src=coalesce(src_ip, src, Source_Network_Address, host)\n| eval action=case(EventCode=4625, \"failure\", match(_raw, \"Failed password|authentication failure|logon failure\"), \"failure\", true(), \"other\")\n| where action=\"failure\"\n| bin _time span=5m\n| stats count as login_failures by _time src\n| join src [\n  index=FinServe_win sourcetype=WinEventLog earliest=-24h latest=now\n  | search \"intrusion\" OR \"IDS\" OR \"attack\" OR \"alert\"\n  | rename src_ip as src\n  | bin _time span=5m\n  | stats count as ids_alerts by _time src\n]\n| stats sum(login_failures) as total_failures, sum(ids_alerts) as total_alerts by src\n| sort - total_failures\n| where total_alerts > 0"
+  },
+  {
+    "question": "For EduSmart, identify systems with most critical vulnerabilities reported in the last 30 days",
+    "answer": "index=EduSmart_win sourcetype=WinEventLog earliest=-30d\n| search severity=critical OR severity=high OR severity=\"Critical\" OR severity=\"High\" OR \"vulnerability\"\n| eval dest=coalesce(dest, dest_host, host, hostname)\n| eval process=coalesce(process_name, application, app_name)\n| stats count by dest process\n| stats sum(count) as total_vulns by dest\n| sort - total_vulns\n| head 20"
+  }
+]
