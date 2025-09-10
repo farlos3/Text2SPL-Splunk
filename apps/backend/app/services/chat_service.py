@@ -91,8 +91,11 @@ Falling back to general assistance..."""
 
                 else:
                     print(f"❌ Query not identified as Splunk-related (confidence: {confidence:.2f}, method: {method})")
-                    # Let it fall through to general chat with a helpful message
-                    
+                    # Strictly reject non-Splunk inputs per requirement
+                    return (
+                        "This input is not related to Splunk. "
+                        "Please provide a Splunk-related request, such as log analysis, SPL commands, or search queries."
+                    )
             except Exception as e:
                 print(f"❌ SPL Service error: {e}")
                 # Fall through to general chat

@@ -38,7 +38,6 @@ from groq import Groq
 
 from app.models.spl import SPLResponse, CompanyInfo, RelevanceCheckResponse
 
-
 class SPLService:
     def __init__(self):
         """Initialize SPL Service with all required components"""
@@ -78,7 +77,7 @@ class SPLService:
         self.qa_pairs = []
         for base_path in possible_bases:
             try:
-                qa_json_path = os.path.join(base_path, "qa_pairs-datamodel.json")
+                qa_json_path = os.path.join(base_path, "qa_pairs-normal.json")
                 with open(qa_json_path, "r", encoding="utf-8") as f:
                     self.qa_pairs = json.load(f)
                 print(f"Loaded QA pairs from: {qa_json_path}")
@@ -528,11 +527,11 @@ RETURN FORMAT (clear labeled sections):
             )
     
     def _pick_best_company(self, user_query: str, verbose: bool = False) -> Dict[str, Any]:
-        """Select best company context for the query (from notebook)"""
+        """Enhanced multi-method company selection (dynamic + LLM + semantic), mirroring notebook flow"""
         if not self.company_data:
             return {
                 "company_name": "Default",
-                "product_name": "System", 
+                "product_name": "System",
                 "index": "main",
                 "sourcetype": "*",
                 "data_model": [],
@@ -540,52 +539,60 @@ RETURN FORMAT (clear labeled sections):
                 "method": "fallback",
                 "company_index": 0
             }
-        
-        # Dynamic keyword company matching (from notebook)
-        words = re.findall(r"\\b\\w+\\b", user_query.lower())
-        words = [w for w in words if len(w) > 2]
-        
-        # Multiple matching strategies
-        for i, c in enumerate(self.company_data):
-            company_score = 0
-            match_reason = "context_match"
-            
-            # Strategy 1: Direct company name match (highest priority)
-            if c['company_name'].lower() in user_query.lower():
-                # Check for platform specification within this company
-                if 'linux' in user_query.lower() and 'linux' in c.get('product_name', '').lower():
+
+        # Helper: flat company description
+        def _company_descriptions(data):
+            descs = []
+            for c in data:
+                descs.append(
+                    f"{c.get('company_name','')} {c.get('product_name','')} "
+                    f"{c.get('domain','')} {c.get('use_cases','')} "
+                    f"{c.get('index','')} {c.get('sourcetype','')}"
+                )
+            return descs
+
+        # Strategy A: Dynamic keyword + direct/platform match (fast path)
+        def _dynamic_keyword_company_matching(user_query, data):
+            words = re.findall(r"\b\w+\b", user_query.lower())
+            words = [w for w in words if len(w) > 2]
+            scores = []
+
+            for i, c in enumerate(data):
+                # Direct company match
+                if c['company_name'].lower() in user_query.lower():
+                    # Optional platform refinement
+                    product_lower = c.get('product_name', '').lower()
+                    if 'linux' in user_query.lower() and 'linux' in product_lower:
+                        return {
+                            "company_name": c["company_name"],
+                            "product_name": c["product_name"],
+                            "index": c.get("index"),
+                            "sourcetype": c.get("sourcetype"),
+                            "data_model": c.get("data_model", []),
+                            "confidence_score": 0.98,
+                            "method": "company_name_direct_match",
+                            "explicit_company": True,
+                            "match_reason": f"Direct {c['company_name']} + Linux",
+                            "company_index": i
+                        }
+                    if 'windows' in user_query.lower() and 'win' in product_lower:
+                        return {
+                            "company_name": c["company_name"],
+                            "product_name": c["product_name"],
+                            "index": c.get("index"),
+                            "sourcetype": c.get("sourcetype"),
+                            "data_model": c.get("data_model", []),
+                            "confidence_score": 0.98,
+                            "method": "company_name_direct_match",
+                            "explicit_company": True,
+                            "match_reason": f"Direct {c['company_name']} + Windows",
+                            "company_index": i
+                        }
                     return {
                         "company_name": c["company_name"],
                         "product_name": c["product_name"],
-                        "index": c.get("index", "main"),
-                        "sourcetype": c.get("sourcetype", "*"),
-                        "data_model": c.get("data_model", []),
-                        "confidence_score": 0.98,
-                        "method": "company_platform_match",
-                        "explicit_company": True,
-                        "match_reason": f"{c['company_name']} Linux platform",
-                        "company_index": i
-                    }
-                elif 'windows' in user_query.lower() and 'win' in c.get('product_name', '').lower():
-                    return {
-                        "company_name": c["company_name"],
-                        "product_name": c["product_name"],
-                        "index": c.get("index", "main"),
-                        "sourcetype": c.get("sourcetype", "*"),
-                        "data_model": c.get("data_model", []),
-                        "confidence_score": 0.98,
-                        "method": "company_platform_match",
-                        "explicit_company": True,
-                        "match_reason": f"{c['company_name']} Windows platform",
-                        "company_index": i
-                    }
-                elif not ('linux' in user_query.lower() or 'windows' in user_query.lower()):
-                    # No platform specified, return first match for this company
-                    return {
-                        "company_name": c["company_name"],
-                        "product_name": c["product_name"],
-                        "index": c.get("index", "main"),
-                        "sourcetype": c.get("sourcetype", "*"),
+                        "index": c.get("index"),
+                        "sourcetype": c.get("sourcetype"),
                         "data_model": c.get("data_model", []),
                         "confidence_score": 0.95,
                         "method": "company_name_direct_match",
@@ -593,55 +600,181 @@ RETURN FORMAT (clear labeled sections):
                         "match_reason": f"Direct mention of {c['company_name']}",
                         "company_index": i
                     }
-                
-            # Strategy 2: Product name/platform match
-            product_lower = c.get('product_name', '').lower()
-            if 'linux' in user_query.lower() and 'linux' in product_lower:
-                company_score = 0.9
-                match_reason = "platform_match"
-                
+
+                # Product/platform match
+                product_lower = c.get('product_name', '').lower()
+                if 'linux' in user_query.lower() and 'linux' in product_lower:
+                    return {
+                        "company_name": c["company_name"],
+                        "product_name": c["product_name"],
+                        "index": c.get("index"),
+                        "sourcetype": c.get("sourcetype"),
+                        "data_model": c.get("data_model", []),
+                        "confidence_score": 0.9,
+                        "method": "platform_match",
+                        "explicit_company": True,
+                        "match_reason": "Platform match: Linux",
+                        "company_index": i
+                    }
+                if 'windows' in user_query.lower() and 'win' in product_lower:
+                    return {
+                        "company_name": c["company_name"],
+                        "product_name": c["product_name"],
+                        "index": c.get("index"),
+                        "sourcetype": c.get("sourcetype"),
+                        "data_model": c.get("data_model", []),
+                        "confidence_score": 0.9,
+                        "method": "platform_match",
+                        "explicit_company": True,
+                        "match_reason": "Platform match: Windows",
+                        "company_index": i
+                    }
+
+                # Context keyword scoring
+                text = f"{c['company_name']} {c['product_name']} {c.get('domain','')} {c.get('use_cases','')} {c.get('index','')} {c.get('sourcetype','')}".lower()
+                tokens = set(re.findall(r"\b\w+\b", text))
+                common_words = set(words).intersection(tokens)
+                inter = len(common_words)
+                freq = sum(1 for w in words if w in tokens) / (len(words) or 1)
+                domain_text = f"{c.get('domain','')} {c.get('use_cases','')}".lower()
+                domain_tokens = set(re.findall(r"\b\w+\b", domain_text))
+                domain_match = len(set(words).intersection(domain_tokens)) / (len(domain_tokens) or 1)
+                weighted_score = inter * 0.3 + freq * 0.4 + domain_match * 0.3
+                scores.append((i, weighted_score, common_words))
+
+            if scores:
+                idx, score, matched_words = max(scores, key=lambda x: x[1])
+                c = data[idx]
                 return {
                     "company_name": c["company_name"],
                     "product_name": c["product_name"],
-                    "index": c.get("index", "main"),
-                    "sourcetype": c.get("sourcetype", "*"),
+                    "index": c.get("index"),
+                    "sourcetype": c.get("sourcetype"),
                     "data_model": c.get("data_model", []),
-                    "confidence_score": company_score,
-                    "method": match_reason,
-                    "explicit_company": True,
-                    "match_reason": f"Platform match: Linux",
-                    "company_index": i
+                    "confidence_score": float(score),
+                    "method": "context_keyword_match",
+                    "match_reason": f"Context match with keywords: {', '.join(list(matched_words)[:5])}",
+                    "company_index": idx
                 }
-            
-            elif 'windows' in user_query.lower() and 'win' in product_lower:
-                company_score = 0.9
-                match_reason = "platform_match"
-                
-                return {
-                    "company_name": c["company_name"],
-                    "product_name": c["product_name"],
-                    "index": c.get("index", "main"),
-                    "sourcetype": c.get("sourcetype", "*"),
-                    "data_model": c.get("data_model", []),
-                    "confidence_score": company_score,
-                    "method": match_reason,
-                    "explicit_company": True,
-                    "match_reason": f"Platform match: Windows",
-                    "company_index": i
-                }
-        
-        # If no specific matches found, return first company as default
-        c = self.company_data[0]
-        return {
-            "company_name": c["company_name"],
-            "product_name": c["product_name"],
-            "index": c.get("index", "main"),
-            "sourcetype": c.get("sourcetype", "*"),
-            "data_model": c.get("data_model", []),
-            "confidence_score": 0.6,
-            "method": "default_fallback",
-            "company_index": 0
-        }
+            c = data[0]
+            return {
+                "company_name": c["company_name"],
+                "product_name": c["product_name"],
+                "index": c.get("index"),
+                "sourcetype": c.get("sourcetype"),
+                "data_model": c.get("data_model", []),
+                "confidence_score": 0.1,
+                "method": "default_fallback",
+                "company_index": 0
+            }
+
+        # Strategy B: LLM-based analysis
+        def _llm_analyze_company_context_advanced(user_query, data):
+            descs = []
+            for i, c in enumerate(data):
+                descs.append(
+                    f"Company {i}: {c['company_name']} - {c['product_name']}\n"
+                    f"- Domain: {c.get('domain', 'N/A')}\n"
+                    f"- Use Cases: {c.get('use_cases', 'N/A')}\n"
+                    f"- Index: {c.get('index','')}\n- Sourcetype: {c.get('sourcetype','')}\n"
+                    f"- Data Models: {', '.join(c.get('data_model', []))}"
+                )
+            prompt = (
+                f"Analyze the query and select the most appropriate company configuration.\n"
+                f"QUERY: {user_query}\n\n"
+                f"ANALYSIS STEPS:\n"
+                f"1. Check explicit company/abbreviation in the query.\n"
+                f"2. Consider technological context (systems, applications, data types).\n"
+                f"3. Match domain/use cases with the query's intent.\n\n"
+                f"Companies available: {', '.join([c['company_name'] for c in data])}\n\n"
+                f"COMPANIES:\n" + "\n".join(descs) +
+                "\n\nRespond as JSON with keys: selected_company_index (0-based), confidence_score (0.0-1.0), reasoning, explicit_company_mentioned (true/false), company_name_mentioned, query_context (brief)."
+            )
+            try:
+                resp = self.call_model(prompt)
+                m = re.search(r"\{.*\}", resp, re.S)
+                obj = json.loads(m.group(0)) if m else {"selected_company_index": 0, "confidence_score": 0.3, "reasoning": "fallback", "explicit_company_mentioned": False}
+            except Exception:
+                obj = {"selected_company_index": 0, "confidence_score": 0.3, "reasoning": "fallback", "explicit_company_mentioned": False}
+            idx = obj.get("selected_company_index", 0)
+            idx = idx if 0 <= idx < len(data) else 0
+            c = data[idx]
+            confidence = float(obj.get("confidence_score", 0.5))
+            if obj.get("explicit_company_mentioned", False):
+                confidence = max(0.9, confidence)
+            return {
+                "company_name": c["company_name"],
+                "product_name": c["product_name"],
+                "index": c.get("index"),
+                "sourcetype": c.get("sourcetype"),
+                "data_model": c.get("data_model", []),
+                "confidence_score": confidence,
+                "explicit_company": obj.get("explicit_company_mentioned", False),
+                "company_mentioned": obj.get("company_name_mentioned", ""),
+                "query_context": obj.get("query_context", ""),
+                "reasoning": obj.get("reasoning", ""),
+                "method": "llm_analysis",
+                "company_index": idx
+            }
+
+        # Strategy C: Semantic matching with embeddings
+        def _semantic_company_matching(user_query, data):
+            descs = _company_descriptions(data)
+            qv = self.embedding_model.embed_query(user_query)
+            dvs = self.embedding_model.embed_documents(descs)
+            sims = cosine_similarity([qv], dvs)[0]
+            idx = int(np.argmax(sims))
+            c = data[idx]
+            return {
+                "company_name": c["company_name"],
+                "product_name": c["product_name"],
+                "index": c.get("index"),
+                "sourcetype": c.get("sourcetype"),
+                "data_model": c.get("data_model", []),
+                "confidence_score": float(sims[idx]),
+                "method": "semantic_matching",
+                "company_index": idx
+            }
+
+        # Orchestrate selection similar to notebook
+        try:
+            dyn = _dynamic_keyword_company_matching(user_query, self.company_data)
+            if dyn.get("method") in ["company_name_direct_match", "platform_match"]:
+                return dyn
+        except Exception:
+            dyn = None
+
+        candidates = []
+        if dyn:
+            candidates.append(dyn)
+        try:
+            llm_res = _llm_analyze_company_context_advanced(user_query, self.company_data)
+            if llm_res.get("explicit_company", False):
+                return llm_res
+            candidates.append(llm_res)
+        except Exception:
+            pass
+        try:
+            sem = _semantic_company_matching(user_query, self.company_data)
+            candidates.append(sem)
+        except Exception:
+            pass
+
+        if not candidates:
+            c = self.company_data[0]
+            return {
+                "company_name": c["company_name"],
+                "product_name": c["product_name"],
+                "index": c.get("index"),
+                "sourcetype": c.get("sourcetype"),
+                "data_model": c.get("data_model", []),
+                "confidence_score": 0.3,
+                "method": "default_fallback",
+                "company_index": 0
+            }
+
+        best = max(candidates, key=lambda r: r.get("confidence_score", 0))
+        return best
     
     def _generate_unified_spl_query(self, user_query: str, company: Dict[str, Any], extracted_elements: str = "", qa_pairs: List[Dict] = None) -> str:
         """Generate SPL using unified template (from notebook)"""
@@ -661,6 +794,12 @@ CRITICAL RULES (Generalized):
    - Use stats/eventstats/timechart appropriately.
    - Avoid unnecessary append when schemas differ; consider eventstats/join only with clear join keys.
 7) Output SPL only (no explanation).
+
+HARD CONSTRAINTS (Must follow exactly):
+- You MUST use the provided company context below. Do not switch companies or indices.
+- Use index={index} exactly (do not substitute another index). If {index} is missing, stop and ask for company/index.
+- If sourcetype is specified (not *), use sourcetype={sourcetype}. If {sourcetype} is *, infer a plausible sourcetype from the platform (e.g., linux: linux_secure/syslog; windows: WinEventLog).
+- Do NOT invent or use other company names, indices, or sourcetypes not consistent with the context.
 
 COMPANY IDENTIFICATION (Flexible):
 - If a company/system is mentioned, map it to a plausible index naming pattern (e.g., <Company>_<platform>) only if the context or provided examples justify it.

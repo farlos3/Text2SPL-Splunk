@@ -56,7 +56,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
               </div>
               <div className="relative">
                 <div className="p-6 max-h-60 md:max-h-80 lg:max-h-96 overflow-y-auto overflow-x-hidden code-scroll">
-                  <pre className="text-sm md:text-base font-mono leading-relaxed">
+                  <pre className="text-xs md:text-sm font-mono leading-relaxed">
                     <code className="text-green-400 block whitespace-pre-wrap break-words">{displayedSpl.trim()}</code>
                   </pre>
                 </div>
