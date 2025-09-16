@@ -149,10 +149,6 @@
     "answer": "index=EduSmart_win (sourcetype=firewall OR sourcetype=stream:http OR sourcetype=pan:traffic OR sourcetype=cisco:asa) earliest=-24h\n| lookup malicious_domains.csv domain as dest_domain OUTPUT is_malicious\n| search is_malicious=1\n| stats count by src_ip, dest_domain, category\n| sort - count"
   },
   {
-    "question": "Find USB device insertions across all systems in the last 24 hours",
-    "answer": "index=HealthPlus_win sourcetype=WinEventLog EventCode=2003 OR EventCode=2100 OR \"USB\" earliest=-24h\n| regex _raw=\"(?i)(usb|removable|storage|flash|thumb)\"\n| stats count by _time, host, user, Device_Description\n| sort - _time"
-  },
-  {
     "question": "For TechNova, identify systems with disabled Windows Defender in the last week",
     "answer": "index=TechNova_win sourcetype=WinEventLog earliest=-7d\n| search (EventCode=5001 OR EventCode=5025 OR \"Defender disabled\" OR \"protection disabled\")\n| stats latest(_time) as time by host\n| convert ctime(time) as Time\n| sort - time"
   },
@@ -195,5 +191,145 @@
   {
     "question": "For EduSmart, identify systems with most critical vulnerabilities reported in the last 30 days",
     "answer": "index=EduSmart_win sourcetype=WinEventLog earliest=-30d\n| search severity=critical OR severity=high OR severity=\"Critical\" OR severity=\"High\" OR \"vulnerability\"\n| eval dest=coalesce(dest, dest_host, host, hostname)\n| eval process=coalesce(process_name, application, app_name)\n| stats count by dest process\n| stats sum(count) as total_vulns by dest\n| sort - total_vulns\n| head 20"
+  },
+
+  {
+    "question": "Show the top 10 source IPs generating the most failed login attempts across all companies in the last hour",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-1h\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| eval src=coalesce(Source_Network_Address, src_ip, src, rhost, host)\n| eval action=case(\n    EventCode=4625, \"failure\",\n    match(_raw,\"Failed password|authentication failure|logon failure|pam_unix.*authentication failure\"), \"failure\",\n    true(), \"other\"\n  )\n| search action=failure AND isnotnull(user) AND isnotnull(src)\n| stats count by src\n| sort - count\n| head 10"
+  },
+
+  {
+    "question": "Find privilege escalation attempts across all companies in the past 24 hours",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-24h\n| search (EventCode=4672 OR EventCode=4732 OR \"sudo\" OR \"runas\" OR \"UAC\" OR \"User Account Control\" OR \"SeDebugPrivilege\" OR \"pam_unix.*sudo\")\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| eval command=coalesce(Process_Name, ProcessName, command_name, process)\n| eval object=coalesce(Object_Name, ObjectName, object_name)\n| stats count by user command object index\n| sort - count"
+  },
+
+  {
+    "question": "Identify DNS responses with unusually large payload sizes across all organizations in the last 48 hours",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-48h\n| search \"DNS\" AND (\"response\" OR \"answer\")\n| eval dns_server=coalesce(dest_ip, dest, server_ip)\n| eval queried_domain=coalesce(query, domain, dns_query)\n| eval payload_size=coalesce(bytes, length, size, reply_size)\n| where isnotnull(payload_size) AND payload_size > 1000\n| eval domain_suffix=replace(queried_domain, \".*\\.(\\w+\\.\\w+)$\", \"\\1\")\n| stats avg(payload_size) as avg_size, max(payload_size) as max_size, count by dns_server, domain_suffix\n| sort - avg_size"
+  },
+
+  {
+    "question": "Compare authentication success rates across all companies for the last 7 days",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-7d\n| eval action=case(\n    EventCode=4624, \"success\",\n    EventCode=4625, \"failure\",\n    match(_raw,\"Accepted password|session opened|pam_unix.*session opened\"), \"success\",\n    match(_raw,\"Failed password|authentication failure|logon failure|pam_unix.*authentication failure\"), \"failure\",\n    true(), \"other\"\n  )\n| where action!=\"other\"\n| rex field=index \"(?<company>\\w+)_\"\n| bin _time span=1d\n| stats count by _time company action\n| eval success_rate=round(count/total*100,2)\n| chart avg(success_rate) by company action\n| sort - company"
+  },
+
+  {
+    "question": "Find top 15 PowerShell commands executed across all companies with suspicious patterns",
+    "answer": "index=* sourcetype=WinEventLog (EventCode=4104 OR EventCode=4103 OR \"powershell.exe\") earliest=-24h\n| regex _raw=\"(?i)(invoke-expression|iex|invoke-webrequest|invoke-restmethod|net\\.webclient|downloadstring|downloadfile|bypass|encodedcommand|-enc|-e|hidden|webclient\\.downloadstring|shellcode|mimikatz|SecureString)\"\n| eval command=coalesce(CommandLine, command, process_command)\n| eval user=coalesce(User_Name, user, account)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by command company user\n| sort - count\n| head 15"
+  },
+
+  {
+    "question": "Monitor service account activities across all organizations in the last 24 hours",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-24h\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| search user=\"*svc*\" OR user=\"*service*\" OR user=\"*admin*\" OR user=\"*system*\" OR user=\"*_sa\"\n| eval action=case(\n    EventCode=4624, \"success\",\n    EventCode=4625, \"failure\",\n    match(_raw,\"Accepted password|session opened\"), \"success\",\n    match(_raw,\"Failed password|authentication failure|logon failure\"), \"failure\",\n    true(), \"other\"\n  )\n| where action!=\"other\"\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by user action company\n| where count < 3 OR count > 50\n| sort - count"
+  },
+
+  {
+    "question": "Detect brute force attacks targeting multiple companies simultaneously",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-4h\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| eval src=coalesce(Source_Network_Address, src_ip, src, rhost, host)\n| eval action=case(\n    EventCode=4625, \"failure\",\n    match(_raw,\"Failed password|authentication failure|logon failure|pam_unix.*authentication failure\"), \"failure\",\n    true(), \"other\"\n  )\n| search action=failure AND isnotnull(user) AND isnotnull(src)\n| rex field=index \"(?<company>\\w+)_\"\n| bin _time span=15m\n| stats count as failures, dc(company) as companies_targeted by _time src user\n| where failures>=10 AND companies_targeted>=2\n| sort - failures"
+  },
+
+  {
+    "question": "Find registry modifications across all Windows systems in the enterprise",
+    "answer": "index=* sourcetype=WinEventLog (EventCode=4657 OR EventCode=4663 OR \"RegSetValue\") earliest=-2h\n| eval registry_key=coalesce(Object_Name, ObjectName, registry_key_name)\n| eval process=coalesce(Process_Name, ProcessName, process_name)\n| eval user=coalesce(User_Name, user, account)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by registry_key process user company\n| sort - count"
+  },
+
+  {
+    "question": "Track USB device usage patterns across all organizations",
+    "answer": "index=* sourcetype=WinEventLog (EventCode=2003 OR EventCode=2100 OR \"USB\") earliest=-7d\n| regex _raw=\"(?i)(usb|removable|storage|flash|thumb)\"\n| eval device=coalesce(Device_Description, device_name, device_type)\n| eval user=coalesce(User_Name, user, account)\n| rex field=index \"(?<company>\\w+)_\"\n| bin _time span=1d\n| stats count by _time company user device\n| sort - _time"
+  },
+
+  {
+    "question": "Analyze network connections to external IPs across all companies",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-6h\n| where isnotnull(dest_ip) AND dest_port!=0\n| search NOT (dest_ip=\"10.*\" OR dest_ip=\"192.168.*\" OR dest_ip=\"172.16.*\" OR dest_ip=\"172.17.*\" OR dest_ip=\"172.18.*\" OR dest_ip=\"172.19.*\" OR dest_ip=\"172.2*\" OR dest_ip=\"172.30.*\" OR dest_ip=\"172.31.*\")\n| eval src=coalesce(src_ip, src, host)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by src dest_ip dest_port company\n| sort - count"
+  },
+
+  {
+    "question": "Compare security alert volumes across all organizations in the last week",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_secure OR sourcetype=linux_syslog) earliest=-7d\n| search (Priority=1 OR Priority=high OR Severity=critical OR \"intrusion\" OR \"attack\" OR \"exploit\" OR \"alert\" OR \"IDS\")\n| eval signature=coalesce(signature, alert_message, Message, alert_signature)\n| rex field=index \"(?<company>\\w+)_\"\n| bin _time span=1d\n| stats count by _time company signature\n| chart sum(count) by _time company\n| sort - _time"
+  },
+
+  {
+    "question": "Find suspicious scheduled task creations enterprise-wide",
+    "answer": "index=* sourcetype=WinEventLog (EventCode=4698 OR EventCode=4702) earliest=-3d\n| eval action=case(EventCode=4698, \"created\", EventCode=4702, \"modified\", true(), \"other\")\n| eval user=coalesce(User_Name, user, account)\n| eval task_name=coalesce(Task_Name, TaskName, task)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by action user task_name company\n| sort - count"
+  },
+
+  {
+    "question": "Show VPN connections outside business hours across all companies",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_secure OR sourcetype=linux_syslog) earliest=-7d\n| search \"VPN\" OR \"Virtual Private Network\" OR \"vpn\" OR \"openvpn\"\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| eval src=coalesce(Source_Network_Address, src_ip, src, rhost, host)\n| eval hour=strftime(_time, \"%H\")\n| where tonumber(hour) < 6 OR tonumber(hour) >= 20\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by _time user src company\n| sort - _time"
+  },
+
+  {
+    "question": "Identify file access violations across all organizations",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-24h\n| search (EventCode=4656 AND Keywords=0x8010000000000000) OR \"permission denied\" OR \"access denied\" OR \"unauthorized\"\n| eval file_path=coalesce(Object_Name, ObjectName, file_path, path)\n| eval process=coalesce(Process_Name, ProcessName, process_name)\n| eval user=coalesce(User_Name, user, account)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by file_path process user company\n| sort - count"
+  },
+
+  {
+    "question": "Monitor Windows Defender status changes across the enterprise",
+    "answer": "index=* sourcetype=WinEventLog earliest=-7d\n| search (EventCode=5001 OR EventCode=5025 OR \"Defender disabled\" OR \"protection disabled\" OR \"real-time protection\" OR \"antimalware\")\n| eval user=coalesce(User_Name, user, account)\n| eval action=coalesce(action, change_type, status)\n| rex field=index \"(?<company>\\w+)_\"\n| stats latest(_time) as last_event by host company action\n| convert ctime(last_event) as Time\n| sort - last_event"
+  },
+
+  {
+    "question": "Find password changes across all systems in the last week",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-7d\n| search (EventCode=4723 OR EventCode=4724 OR \"password changed\" OR \"passwd\" OR \"chpasswd\" OR \"usermod\")\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| eval changed_by=coalesce(SubjectUserName, changed_by, admin_user)\n| rex field=index \"(?<company>\\w+)_\"\n| bin _time span=1d\n| stats count by _time user changed_by company\n| sort - _time"
+  },
+
+  {
+    "question": "Detect potential data exfiltration across all companies via large file transfers",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-24h\n| search (\"copy\" OR \"xcopy\" OR \"robocopy\" OR \"scp\" OR \"rsync\" OR \"ftp\" OR \"sftp\") AND (bytes>100000000 OR size>100000000)\n| eval file_size=coalesce(bytes, size, file_size)\n| eval user=coalesce(User_Name, user, account)\n| eval command=coalesce(CommandLine, command, process_command)\n| rex field=index \"(?<company>\\w+)_\"\n| stats sum(file_size) as total_bytes, count by user command company\n| eval total_gb=round(total_bytes/1024/1024/1024,2)\n| sort - total_gb"
+  },
+
+  {
+    "question": "Monitor administrative group changes across all organizations",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-7d\n| search (EventCode=4732 OR EventCode=4733 OR \"usermod -aG\" OR \"gpasswd -a\" OR \"group added\" OR \"group removed\")\n| eval user=coalesce(MemberName, TargetUserName, user, account)\n| eval group=coalesce(TargetUserName, GroupName, group_name, dest_group)\n| eval action=case(EventCode=4732, \"added_to_group\", EventCode=4733, \"removed_from_group\", match(_raw, \"added|usermod -aG|gpasswd -a\"), \"added_to_group\", true(), \"removed_from_group\")\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by user group action company\n| sort - count"
+  },
+
+  {
+    "question": "Find processes with high CPU usage patterns across all systems",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-2h\n| search \"cpu\" OR \"processor\" OR \"high usage\" OR \"performance\"\n| eval process=coalesce(Process_Name, ProcessName, process_name, command)\n| eval cpu_usage=coalesce(cpu_percent, cpu_usage, processor_usage)\n| where isnotnull(cpu_usage) AND cpu_usage > 80\n| rex field=index \"(?<company>\\w+)_\"\n| stats avg(cpu_usage) as avg_cpu, max(cpu_usage) as max_cpu, count by process company\n| sort - avg_cpu"
+  },
+
+  {
+    "question": "Track login attempts from multiple countries across all companies",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-24h\n| eval src=coalesce(Source_Network_Address, src_ip, src, rhost, host)\n| eval user=coalesce(TargetUserName, User_Name, user, account, dest_user)\n| eval action=case(EventCode=4624, \"success\", EventCode=4625, \"failure\", match(_raw,\"Accepted password|session opened\"), \"success\", match(_raw,\"Failed password|authentication failure|logon failure\"), \"failure\", true(), \"other\")\n| where action!=\"other\" AND isnotnull(src)\n| rex field=index \"(?<company>\\w+)_\"\n| stats dc(src) as unique_ips, count by user company action\n| where unique_ips >= 5\n| sort - unique_ips"
+  },
+
+  {
+    "question": "Identify suspicious process executions across all Windows systems",
+    "answer": "index=* sourcetype=WinEventLog (EventCode=4688 OR EventCode=1) earliest=-4h\n| search (\"cmd.exe\" OR \"powershell.exe\" OR \"wscript.exe\" OR \"cscript.exe\" OR \"regsvr32.exe\" OR \"rundll32.exe\" OR \"certutil.exe\")\n| eval process=coalesce(Process_Name, ProcessName, NewProcessName, Image)\n| eval command=coalesce(CommandLine, command, process_command)\n| eval user=coalesce(User_Name, user, account, SubjectUserName)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by process command user company\n| sort - count"
+  },
+
+  {
+    "question": "Monitor network service failures across all organizations",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-6h\n| search (\"service failed\" OR \"service stopped\" OR \"daemon failed\" OR \"connection refused\" OR \"bind failed\" OR \"port unavailable\")\n| eval service=coalesce(ServiceName, service, daemon, process_name)\n| eval error_msg=coalesce(Message, error_message, description)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by service error_msg company\n| sort - count"
+  },
+
+  {
+    "question": "Find unusual port usage patterns across all companies",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-12h\n| eval dest_port=coalesce(dest_port, dport, port)\n| eval src=coalesce(src_ip, src, source_ip)\n| where isnotnull(dest_port) AND dest_port > 1024 AND dest_port < 65535\n| search NOT (dest_port=3389 OR dest_port=5985 OR dest_port=5986 OR dest_port=8080 OR dest_port=8443)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by dest_port src company\n| where count < 10\n| sort - count"
+  },
+
+  {
+    "question": "Detect mass file deletions enterprise-wide",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-2h\n| search (EventCode=4663 OR \"deleted\" OR \"removed\" OR \"unlink\" OR \"rm \" OR \"del \")\n| eval file_path=coalesce(Object_Name, ObjectName, file_path, path)\n| eval user=coalesce(User_Name, user, account, SubjectUserName)\n| eval action=coalesce(action, operation, AccessMask)\n| rex field=index \"(?<company>\\w+)_\"\n| bin _time span=5m\n| stats count as files_deleted by _time user company\n| where files_deleted >= 50\n| sort - files_deleted"
+  },
+
+  {
+    "question": "Monitor certificate-related events across all systems",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-7d\n| search (\"certificate\" OR \"cert\" OR \"SSL\" OR \"TLS\" OR \"X509\" OR EventCode=1000 OR EventCode=1001)\n| eval cert_subject=coalesce(certificate_subject, cert_subject, subject)\n| eval cert_issuer=coalesce(certificate_issuer, cert_issuer, issuer)\n| eval action=coalesce(action, operation, event_type)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by cert_subject cert_issuer action company\n| sort - count"
+  },
+
+  {
+    "question": "Find systems with disabled security features across all companies",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_secure OR sourcetype=linux_syslog) earliest=-3d\n| search (\"firewall disabled\" OR \"antivirus disabled\" OR \"UAC disabled\" OR \"audit disabled\" OR \"logging disabled\" OR \"selinux disabled\" OR \"apparmor disabled\")\n| eval security_feature=case(\n    match(_raw, \"firewall\"), \"Firewall\",\n    match(_raw, \"antivirus|defender\"), \"Antivirus\",\n    match(_raw, \"UAC|user account control\"), \"UAC\",\n    match(_raw, \"audit\"), \"Auditing\",\n    match(_raw, \"selinux\"), \"SELinux\",\n    match(_raw, \"apparmor\"), \"AppArmor\",\n    true(), \"Other\"\n  )\n| eval user=coalesce(User_Name, user, account)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by security_feature user company host\n| sort - count"
+  },
+
+  {
+    "question": "Track backup and restore operations across all organizations",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-24h\n| search (\"backup\" OR \"restore\" OR \"shadow copy\" OR \"vssadmin\" OR \"wbadmin\" OR \"tar\" OR \"rsync\" OR \"dump\")\n| eval operation=case(\n    match(_raw, \"backup|shadow copy|vssadmin create|tar -c\"), \"backup\",\n    match(_raw, \"restore|vssadmin restore|tar -x\"), \"restore\",\n    true(), \"other\"\n  )\n| eval user=coalesce(User_Name, user, account)\n| eval command=coalesce(CommandLine, command, process_command)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by operation user command company\n| sort - count"
+  },
+
+  {
+    "question": "Monitor email and communication security events across all companies",
+    "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-24h\n| search (\"smtp\" OR \"email\" OR \"mail\" OR \"outlook\" OR \"exchange\" OR \"attachment\" OR \"phishing\" OR \"spam\")\n| eval email_event=case(\n    match(_raw, \"phishing|suspicious\"), \"Phishing Attempt\",\n    match(_raw, \"attachment|executable\"), \"Suspicious Attachment\",\n    match(_raw, \"spam|bulk\"), \"Spam\",\n    match(_raw, \"login|authentication\"), \"Email Login\",\n    true(), \"Other\"\n  )\n| eval user=coalesce(User_Name, user, account, recipient, sender)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by email_event user company\n| sort - count"
   }
 ]

@@ -27,7 +27,6 @@
     "sourcetype": "linux_syslog",
     "data_model": ["Change"]
   },
-
   {
     "company_name": "FinServe",
     "product_name": "win_server",

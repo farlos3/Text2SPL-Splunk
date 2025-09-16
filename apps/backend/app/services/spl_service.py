@@ -553,84 +553,104 @@ RETURN FORMAT (clear labeled sections):
 
         # Strategy A: Dynamic keyword + direct/platform match (fast path)
         def _dynamic_keyword_company_matching(user_query, data):
-            words = re.findall(r"\b\w+\b", user_query.lower())
+            query_lower = user_query.lower()
+            words = re.findall(r"\b\w+\b", query_lower)
             words = [w for w in words if len(w) > 2]
+            
+            # Intelligent platform detection using LLM
+            def _detect_platform_context(query_text):
+                """Use LLM to intelligently detect platform context"""
+                platform_prompt = f"""Analyze this query to determine the target platform/technology:
+
+Query: "{query_text}"
+
+Consider these factors:
+- Specific tools/applications mentioned (Windows Defender, PowerShell, sudo, systemctl, etc.)
+- File paths and system directories (C:\\, /etc/, /var/, etc.)
+- Log sources and event types (EventCode, syslog, WinEventLog, etc.)
+- Administrative commands and processes
+- Operating system context clues
+
+Return JSON only:
+{{
+    "primary_platform": "windows|linux|mixed|unknown",
+    "confidence": 0.0-1.0,
+    "reasoning": "brief explanation",
+    "technology_indicators": ["list", "of", "key", "indicators"]
+}}"""
+                
+                try:
+                    response = self.call_model(platform_prompt, temperature=0.1)
+                    json_match = re.search(r'\{[^}]+\}', response, re.DOTALL)
+                    if json_match:
+                        result = json.loads(json_match.group(0))
+                        return {
+                            "platform": result.get("primary_platform", "unknown"),
+                            "confidence": float(result.get("confidence", 0.5)),
+                            "reasoning": result.get("reasoning", ""),
+                            "indicators": result.get("technology_indicators", [])
+                        }
+                except Exception as e:
+                    print(f"LLM platform detection error: {e}")
+                
+                # Fallback to basic keyword detection
+                query_lower = query_text.lower()
+                windows_signals = ['defender', 'powershell', 'registry', 'eventcode', 'c:\\']
+                linux_signals = ['sudo', '/etc/', '/var/', 'systemctl', 'bash']
+                
+                win_score = sum(1 for signal in windows_signals if signal in query_lower)
+                linux_score = sum(1 for signal in linux_signals if signal in query_lower)
+                
+                if win_score > linux_score:
+                    return {"platform": "windows", "confidence": 0.7, "reasoning": "Basic keyword fallback", "indicators": []}
+                elif linux_score > win_score:
+                    return {"platform": "linux", "confidence": 0.7, "reasoning": "Basic keyword fallback", "indicators": []}
+                else:
+                    return {"platform": "unknown", "confidence": 0.3, "reasoning": "No clear platform indicators", "indicators": []}
+            
+            # Detect platform context
+            platform_context = _detect_platform_context(user_query)
+            has_windows_context = platform_context["platform"] == "windows"
+            has_linux_context = platform_context["platform"] == "linux"
+            
+            best_matches = []
             scores = []
 
             for i, c in enumerate(data):
-                # Direct company match
-                if c['company_name'].lower() in user_query.lower():
-                    # Optional platform refinement
-                    product_lower = c.get('product_name', '').lower()
-                    if 'linux' in user_query.lower() and 'linux' in product_lower:
-                        return {
-                            "company_name": c["company_name"],
-                            "product_name": c["product_name"],
-                            "index": c.get("index"),
-                            "sourcetype": c.get("sourcetype"),
-                            "data_model": c.get("data_model", []),
-                            "confidence_score": 0.98,
-                            "method": "company_name_direct_match",
-                            "explicit_company": True,
-                            "match_reason": f"Direct {c['company_name']} + Linux",
-                            "company_index": i
-                        }
-                    if 'windows' in user_query.lower() and 'win' in product_lower:
-                        return {
-                            "company_name": c["company_name"],
-                            "product_name": c["product_name"],
-                            "index": c.get("index"),
-                            "sourcetype": c.get("sourcetype"),
-                            "data_model": c.get("data_model", []),
-                            "confidence_score": 0.98,
-                            "method": "company_name_direct_match",
-                            "explicit_company": True,
-                            "match_reason": f"Direct {c['company_name']} + Windows",
-                            "company_index": i
-                        }
-                    return {
+                company_name_lower = c['company_name'].lower()
+                product_lower = c.get('product_name', '').lower()
+                
+                # Direct company match (highest priority)
+                if company_name_lower in query_lower:
+                    confidence = 0.95
+                    match_reason = f"Direct mention of {c['company_name']}"
+                    
+                    # Platform-specific match gets higher confidence
+                    if has_linux_context and 'linux' in product_lower:
+                        confidence = 0.98
+                        match_reason = f"Direct {c['company_name']} + Linux context"
+                    elif has_windows_context and 'win' in product_lower:
+                        confidence = 0.98
+                        match_reason = f"Direct {c['company_name']} + Windows context"
+                    elif not has_linux_context and 'win' in product_lower:
+                        # Default to Windows if no explicit Linux context
+                        confidence = 0.96
+                        match_reason = f"Direct {c['company_name']} (default Windows)"
+                    
+                    best_matches.append({
                         "company_name": c["company_name"],
                         "product_name": c["product_name"],
                         "index": c.get("index"),
                         "sourcetype": c.get("sourcetype"),
                         "data_model": c.get("data_model", []),
-                        "confidence_score": 0.95,
+                        "confidence_score": confidence,
                         "method": "company_name_direct_match",
                         "explicit_company": True,
-                        "match_reason": f"Direct mention of {c['company_name']}",
+                        "match_reason": match_reason,
                         "company_index": i
-                    }
+                    })
 
-                # Product/platform match
-                product_lower = c.get('product_name', '').lower()
-                if 'linux' in user_query.lower() and 'linux' in product_lower:
-                    return {
-                        "company_name": c["company_name"],
-                        "product_name": c["product_name"],
-                        "index": c.get("index"),
-                        "sourcetype": c.get("sourcetype"),
-                        "data_model": c.get("data_model", []),
-                        "confidence_score": 0.9,
-                        "method": "platform_match",
-                        "explicit_company": True,
-                        "match_reason": "Platform match: Linux",
-                        "company_index": i
-                    }
-                if 'windows' in user_query.lower() and 'win' in product_lower:
-                    return {
-                        "company_name": c["company_name"],
-                        "product_name": c["product_name"],
-                        "index": c.get("index"),
-                        "sourcetype": c.get("sourcetype"),
-                        "data_model": c.get("data_model", []),
-                        "confidence_score": 0.9,
-                        "method": "platform_match",
-                        "explicit_company": True,
-                        "match_reason": "Platform match: Windows",
-                        "company_index": i
-                    }
-
-                # Context keyword scoring
+                # Context keyword scoring for fallback
                 text = f"{c['company_name']} {c['product_name']} {c.get('domain','')} {c.get('use_cases','')} {c.get('index','')} {c.get('sourcetype','')}".lower()
                 tokens = set(re.findall(r"\b\w+\b", text))
                 common_words = set(words).intersection(tokens)
@@ -641,7 +661,13 @@ RETURN FORMAT (clear labeled sections):
                 domain_match = len(set(words).intersection(domain_tokens)) / (len(domain_tokens) or 1)
                 weighted_score = inter * 0.3 + freq * 0.4 + domain_match * 0.3
                 scores.append((i, weighted_score, common_words))
+            
+            # Return best direct match if found
+            if best_matches:
+                best_match = max(best_matches, key=lambda x: x['confidence_score'])
+                return best_match
 
+            # Fallback to keyword scoring
             if scores:
                 idx, score, matched_words = max(scores, key=lambda x: x[1])
                 c = data[idx]
@@ -656,6 +682,8 @@ RETURN FORMAT (clear labeled sections):
                     "match_reason": f"Context match with keywords: {', '.join(list(matched_words)[:5])}",
                     "company_index": idx
                 }
+            
+            # Ultimate fallback
             c = data[0]
             return {
                 "company_name": c["company_name"],
@@ -736,13 +764,28 @@ RETURN FORMAT (clear labeled sections):
                 "company_index": idx
             }
 
-        # Orchestrate selection similar to notebook
+        # Orchestrate selection with proper priority order
+        # 1. First check for EXPLICIT company mentions (highest priority)
         try:
             dyn = _dynamic_keyword_company_matching(user_query, self.company_data)
             if dyn.get("method") in ["company_name_direct_match", "platform_match"]:
+                print(f"🎯 Direct company match found: {dyn['company_name']} (confidence: {dyn['confidence_score']})")
                 return dyn
-        except Exception:
+        except Exception as e:
+            print(f"Dynamic matching error: {e}")
             dyn = None
+
+        # 2. Then check for cross-company patterns (only if no specific company found)
+        cross_company_result = self._detect_cross_company_queries(user_query)
+        if cross_company_result:
+            print(f"🌐 Cross-company query detected (confidence: {cross_company_result['confidence_score']})")
+            return cross_company_result
+
+        # 2.5. Check for generic queries that might benefit from cross-company analysis
+        generic_result = self._detect_generic_queries(user_query)
+        if generic_result:
+            print(f"📊 Generic query detected - suggesting cross-company analysis")
+            return generic_result
 
         candidates = []
         if dyn:
@@ -776,81 +819,326 @@ RETURN FORMAT (clear labeled sections):
         best = max(candidates, key=lambda r: r.get("confidence_score", 0))
         return best
     
+    def _detect_cross_company_queries(self, user_query: str) -> Optional[Dict[str, Any]]:
+        """LLM-based detection for cross-company queries that should use index=*"""
+        
+        system_prompt = """You are an expert at detecting cross-company/enterprise-wide queries for Splunk analysis.
+
+CRITICAL: Only classify as cross-company if the query EXPLICITLY requires data from ALL companies/organizations.
+
+EXPLICIT CROSS-COMPANY INDICATORS (must be present):
+- Clear mentions: "all companies", "enterprise-wide", "organization-wide", "across all organizations"
+- Comparative analysis: "compare across companies", "enterprise trends", "organization-wide patterns"
+- Explicit scope: "every company", "entire organization", "targeting all organizations"
+
+SINGLE COMPANY INDICATORS (strong rejection):
+- ANY specific company name: "For SafeBank", "TechNova systems", "HealthPlus", "AirLogix", "GreenEnergy", "EduSmart", "FinServe"
+- Company-specific context: "At [Company]", "[Company] logs", "[Company] systems"
+
+IMPORTANT RULES:
+1. If ANY company name is mentioned → ALWAYS single company (confidence = 0.1)
+2. Only return cross-company if confidence >= 0.8 AND no company names present
+3. Be very conservative - when in doubt, choose single company
+
+Return ONLY valid JSON:
+{
+    "is_cross_company": true/false,
+    "confidence": 0.0-1.0,
+    "reasoning": "brief explanation of decision"
+}"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Query: {user_query}"}
+        ]
+        
+        try:
+            response = self.call_model(messages, temperature=0.1)
+            
+            # Extract JSON from response
+            json_match = re.search(r'\{[^}]+\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                
+                is_cross_company = result.get("is_cross_company", False)
+                confidence = float(result.get("confidence", 0.5))
+                reasoning = result.get("reasoning", "LLM analysis")
+                
+                # Extra validation: check for company names in query
+                company_names = [c["company_name"] for c in self.company_data]
+                has_company_name = any(name.lower() in user_query.lower() for name in company_names)
+                
+                if has_company_name:
+                    print(f"🚫 Company name detected in query, rejecting cross-company classification")
+                    return None
+                
+                # Require high confidence for cross-company detection
+                if is_cross_company and confidence >= 0.8:
+                    print(f"✅ LLM cross-company detection: confidence={confidence}, reasoning={reasoning}")
+                    return {
+                        "company_name": "All Companies",
+                        "product_name": "Cross-Company Analysis",
+                        "index": "*",
+                        "sourcetype": None,
+                        "data_model": [],
+                        "confidence_score": confidence,
+                        "method": "llm_cross_company_detection",
+                        "company_index": -1,
+                        "is_cross_company": True,
+                        "reasoning": reasoning
+                    }
+                else:
+                    print(f"❌ LLM rejected cross-company (confidence={confidence}, reasoning={reasoning})")
+                    return None
+                    
+        except Exception as e:
+            print(f"LLM cross-company detection error: {e}")
+            
+        # Fallback to simple pattern matching if LLM fails
+        q = user_query.lower()
+        
+        # Only the most obvious patterns as fallback
+        obvious_patterns = [
+            "all companies", "all organizations", "enterprise-wide", "organization-wide",
+            "across all companies", "across all organizations", "targeting all organizations"
+        ]
+        
+        if any(pattern in q for pattern in obvious_patterns):
+            return {
+                "company_name": "All Companies",
+                "product_name": "Cross-Company Analysis",
+                "index": "*",
+                "sourcetype": None,
+                "data_model": [],
+                "confidence_score": 0.90,
+                "method": "fallback_pattern_detection",
+                "company_index": -1,
+                "is_cross_company": True,
+                "reasoning": "Fallback pattern matching"
+            }
+        
+        return None
+    
+    def _detect_generic_queries(self, user_query: str) -> Optional[Dict[str, Any]]:
+        """Detect generic queries that don't specify a company but could benefit from cross-company analysis"""
+        
+        # Generic patterns that often need cross-company analysis
+        generic_patterns = [
+            r"monitor\s+.*\s+(on|across|from)\s+.*servers?",  # "Monitor X on servers"
+            r"show\s+.*\s+(login|authentication|access)\s+attempts?",  # "Show login attempts"  
+            r"find\s+.*\s+(suspicious|malicious|unusual)\s+",  # "Find suspicious activity"
+            r"detect\s+.*\s+(attack|intrusion|threat)",  # "Detect attacks"
+            r"analyze\s+.*\s+(patterns?|trends?|behavior)",  # "Analyze patterns"
+            r"track\s+.*\s+(changes?|modifications?)",  # "Track changes"
+            r"identify\s+.*\s+(systems?|hosts?|users?)\s+with",  # "Identify systems with"
+        ]
+        
+        query_lower = user_query.lower()
+        
+        # Check if query matches generic patterns AND doesn't mention specific company
+        company_names = [c["company_name"].lower() for c in self.company_data]
+        has_company_mention = any(f"for {company}" in query_lower for company in company_names)
+        
+        if has_company_mention:
+            return None  # Has specific company mention
+        
+        # Check for generic patterns
+        is_generic = any(re.search(pattern, query_lower) for pattern in generic_patterns)
+        
+        if is_generic:
+            # Additional check: does it mention systems/servers in plural (suggesting enterprise scope)?
+            enterprise_indicators = ['servers', 'systems', 'hosts', 'machines', 'devices', 'endpoints']
+            has_enterprise_scope = any(indicator in query_lower for indicator in enterprise_indicators)
+            
+            if has_enterprise_scope:
+                return {
+                    "company_name": "All Companies",
+                    "product_name": "Cross-Company Analysis", 
+                    "index": "*",
+                    "sourcetype": None,
+                    "data_model": [],
+                    "confidence_score": 0.75,
+                    "method": "generic_cross_company_suggestion",
+                    "company_index": -1,
+                    "is_cross_company": True,
+                    "reasoning": "Generic query with enterprise scope - suggesting cross-company analysis"
+                }
+        
+        return None
+    
     def _generate_unified_spl_query(self, user_query: str, company: Dict[str, Any], extracted_elements: str = "", qa_pairs: List[Dict] = None) -> str:
-        """Generate SPL using unified template (from notebook)"""
-        template = """You are an expert Splunk SPL query generator. Create a single, correct, efficient query using standard Splunk search syntax.
-
-CRITICAL RULES (Generalized):
-1) Use standard index/sourcetype syntax: index=<index> sourcetype=<sourcetype> when those are known or inferable from context; otherwise keep selection broad but relevant (e.g., index=* if truly cross-domain).
-2) Select index/sourcetype based on cues in the request (company names, platforms like Windows/Linux, technologies, or data sources mentioned). Do not hardcode any fixed inventory.
-3) Include time filters when implied or requested (e.g., earliest=-24h, -72h, -7d, @d). Use bucketing (bin/timechart) for time trends.
-4) Prefer precise conditions when available (e.g., EventCode for Windows) and use textual matches as fallback when codes/fields are unknown.
-5) Normalize commonly variable fields with coalesce patterns if applicable (keep general):
-   - user := coalesce(User_Name, user, account, dest_user)
-   - src  := coalesce(Source_Network_Address, src_ip, src, host)
-   - path := coalesce(ImagePath, Service_File_Name)
-6) Keep queries efficient and readable:
-   - Use where/isnotnull to filter nulls.
-   - Use stats/eventstats/timechart appropriately.
-   - Avoid unnecessary append when schemas differ; consider eventstats/join only with clear join keys.
-7) Output SPL only (no explanation).
-
-HARD CONSTRAINTS (Must follow exactly):
-- You MUST use the provided company context below. Do not switch companies or indices.
-- Use index={index} exactly (do not substitute another index). If {index} is missing, stop and ask for company/index.
-- If sourcetype is specified (not *), use sourcetype={sourcetype}. If {sourcetype} is *, infer a plausible sourcetype from the platform (e.g., linux: linux_secure/syslog; windows: WinEventLog).
-- Do NOT invent or use other company names, indices, or sourcetypes not consistent with the context.
-
-COMPANY IDENTIFICATION (Flexible):
-- If a company/system is mentioned, map it to a plausible index naming pattern (e.g., <Company>_<platform>) only if the context or provided examples justify it.
-- If not mentioned or unclear, choose a reasonable generic scope without making unsupported assumptions.
-
-QUERY ANALYSIS:
-- Identify any company/organization/system cues.
-- Determine the data intent (e.g., authentication, change/config, service, IDS-like, performance).
-- Build the search with appropriate index/sourcetype scope, time bounds, filters, and grouping.
-- Use appropriate search commands and statistical functions.
-- Apply normalization (coalesce) and grouping (stats/timechart/table) as needed.
-
-CONTEXT:
-- Company: {company_name} ({product_name})
-- Base Index: {index} (use appropriately based on query context)
-- Sourcetype: {sourcetype}
-
-USER REQUEST: {query}
-
-EXTRACTED ELEMENTS:
-{extracted_elements}
-
-RELEVANT QA EXAMPLES (study patterns; do not copy blindly):
-{qa_examples}
-
-GENERATE SPL (single query; standard format when known):
-"""
+        """Generate SPL using unified template with strict index/sourcetype validation"""
+        # Enhanced context with cross-company awareness (define early)
+        is_cross_company = company.get('is_cross_company', False) or company.get('index') == '*'
         
-        # Get the most relevant QA examples for this query
-        qa_examples = ""
-        if qa_pairs:
-            relevant_examples = self._get_most_relevant_qa_examples(user_query, qa_pairs, k=3)
-            qa_examples = "\n\n".join([f"Q: {qa['question']}\nA: {qa['answer']}" for qa in relevant_examples])
+        # Validate and enforce correct index/sourcetype format
+        def _validate_company_context(company_info):
+            """Ensure company context follows index-sourcetype.json format"""
+            index = company_info.get('index', 'main')
+            sourcetype = company_info.get('sourcetype', 'WinEventLog')
+            company_name = company_info.get('company_name', 'Default')
+            
+            # For cross-company queries
+            if is_cross_company or index == '*':
+                return {
+                    'index': '*',
+                    'sourcetype_clause': '(sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog)',
+                    'needs_company_extraction': True
+                }
+            
+            # For single company queries - ensure proper format
+            if not index.endswith('_win') and not index.endswith('_linux'):
+                # Try to infer from available data
+                for company_data in self.company_data:
+                    if company_data['company_name'].lower() == company_name.lower():
+                        return {
+                            'index': company_data['index'],
+                            'sourcetype_clause': f'sourcetype={company_data["sourcetype"]}',
+                            'needs_company_extraction': False
+                        }
+                
+                # Fallback - assume Windows if no clear indication
+                return {
+                    'index': f'{company_name}_win',
+                    'sourcetype_clause': 'sourcetype=WinEventLog',
+                    'needs_company_extraction': False
+                }
+            
+            # Index format is already correct
+            return {
+                'index': index,
+                'sourcetype_clause': f'sourcetype={sourcetype}',
+                'needs_company_extraction': False
+            }
         
-        ctx = {
-            "company_name": company.get('company_name', 'Unknown'),
-            "product_name": company.get('product_name', 'Unknown'),
-            "index": company.get('index', 'main'),
-            "sourcetype": company.get('sourcetype', '*'),
-            "query": user_query,
-            "extracted_elements": extracted_elements or 'Use standard index and sourcetype search with appropriate time filters and field filtering',
-            "qa_examples": qa_examples or 'No similar examples available.'
-        }
+        # Get validated context
+        validated_context = _validate_company_context(company)
         
-        prompt = template.format(**ctx)
-        spl_output = self.call_model(prompt)
-        
-        # Clean up output if wrapped in code blocks
-        if "```" in spl_output:
-            m = re.search(r"```(?:spl)?\s*(.*?)\s*```", spl_output, re.S)
-            if m:
-                spl_output = m.group(1).strip()
-        
-        return spl_output
+        try:
+            template = """You are an expert Splunk SPL query generator. Create a single, correct, efficient query using standard Splunk search syntax.
+
+CRITICAL REQUIREMENTS:
+INDEX FORMAT: Must use EXACT format from index-sourcetype.json:
+- Single company: index=CompanyName_win or index=CompanyName_linux  
+- Cross-company: index=* with multiple sourcetypes
+
+MANDATORY INDEX & SOURCETYPE RULES:
+{index_sourcetype_instruction}
+
+FIELD NORMALIZATION STANDARDS:
+- user := coalesce(TargetUserName, User_Name, user, account, dest_user)
+- src := coalesce(Source_Network_Address, src_ip, src, rhost, host)  
+- Windows events: Use EventCode (4624=login success, 4625=login failure, 5001/5025=Defender events)
+- Linux events: Use text patterns ("Accepted password", "Failed password", "sudo")
+
+QUERY STRUCTURE:
+1. index={target_index} {sourcetype_clause} earliest=<timeframe>
+2. Add specific search conditions based on request
+3. Apply field normalization with eval/coalesce  
+{company_extraction}4. Use appropriate aggregations (stats, timechart, etc.)
+5. Sort and limit results appropriately
+
+Company Context: {company_name}
+User Request: {query}
+
+Generate ONLY the SPL query (no explanations):"""
+
+            # Determine instruction based on context
+            if validated_context['needs_company_extraction']:
+                index_instruction = "Cross-company query: MUST use index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog)"
+                company_extraction = "3. Extract company with: rex field=index \"(?<company>\\w+)_\"\n"
+            else:
+                index_instruction = f"Single company query: MUST use exact index format: {validated_context['index']} {validated_context['sourcetype_clause']}"
+                company_extraction = "3. No company extraction needed\n"
+            
+            # Enhanced QA example selection with validation
+            qa_examples = ""
+            if qa_pairs:
+                if is_cross_company:
+                    # Get cross-company examples that use index=*
+                    cross_company_examples = [
+                        qa for qa in qa_pairs 
+                        if isinstance(qa, dict) and qa.get("answer", "").startswith("index=*")
+                    ]
+                    if cross_company_examples:
+                        relevant_examples = self._get_most_relevant_qa_examples(user_query, cross_company_examples, k=2)
+                    else:
+                        relevant_examples = self._get_most_relevant_qa_examples(user_query, qa_pairs, k=2)
+                else:
+                    # Get single company examples with proper index format
+                    company_name = company.get('company_name', '')
+                    company_examples = [
+                        qa for qa in qa_pairs 
+                        if isinstance(qa, dict) and 
+                        qa.get("question", "").lower().startswith(f"for {company_name.lower()}") and
+                        (f"index={company_name}_win" in qa.get("answer", "") or f"index={company_name}_linux" in qa.get("answer", ""))
+                    ]
+                    if company_examples:
+                        relevant_examples = self._get_most_relevant_qa_examples(user_query, company_examples, k=2)
+                    else:
+                        relevant_examples = self._get_most_relevant_qa_examples(user_query, qa_pairs, k=2)
+                
+                qa_examples = "\n\nRELEVANT EXAMPLES:\n" + "\n".join([f"Q: {qa['question']}\nA: {qa['answer']}" for qa in relevant_examples])
+            
+            prompt = template.format(
+                index_sourcetype_instruction=index_instruction,
+                target_index=validated_context['index'],
+                sourcetype_clause=validated_context['sourcetype_clause'],
+                company_extraction=company_extraction,
+                company_name=company.get('company_name', 'Unknown'),
+                query=user_query
+            ) + qa_examples
+            
+            spl_output = self.call_model(prompt, temperature=0.1)
+            
+            # Clean up output if wrapped in code blocks
+            if "```" in spl_output:
+                m = re.search(r"```(?:spl|splunk)?\s*(.*?)\s*```", spl_output, re.S)
+                if m:
+                    spl_output = m.group(1).strip()
+            
+            # Final validation - ensure correct index format
+            lines = spl_output.split('\n')
+            first_line = lines[0].strip()
+            
+            if not is_cross_company and not first_line.startswith(f'index={validated_context["index"]}'):
+                # Force correct index format
+                if '|' in first_line:
+                    search_part, pipe_part = first_line.split('|', 1)
+                    corrected_line = f'index={validated_context["index"]} {validated_context["sourcetype_clause"]} {search_part.split("earliest=")[-1] if "earliest=" in search_part else "earliest=-24h"}'
+                    spl_output = corrected_line + '\n| ' + pipe_part + '\n' + '\n'.join(lines[1:])
+                else:
+                    corrected_line = f'index={validated_context["index"]} {validated_context["sourcetype_clause"]} ' + first_line.replace('index=*', '').replace('index=', '').strip()
+                    spl_output = corrected_line + '\n' + '\n'.join(lines[1:])
+            
+            return spl_output.strip()
+            
+        except Exception as e:
+            print(f"Error in _generate_unified_spl_query: {e}")
+            
+            # Enhanced fallback with correct index format
+            if is_cross_company:
+                index_part = "index=* (sourcetype=WinEventLog OR sourcetype=linux_secure OR sourcetype=syslog OR sourcetype=linux_syslog)"
+                company_extract = "\n| rex field=index \"(?<company>\\w+)_\""
+            else:
+                index_part = f'index={validated_context["index"]} {validated_context["sourcetype_clause"]}'
+                company_extract = ""
+            
+            if "failed login" in user_query.lower() or "login fail" in user_query.lower():
+                return f"""{index_part} earliest=-24h
+| search EventCode=4625 OR match(_raw, "Failed password|authentication failure|logon failure"){company_extract}
+| eval user=coalesce(User_Name, user, account, dest_user)
+| eval src=coalesce(src_ip, src, Source_Network_Address, host)
+| stats count by user src
+| sort - count
+| head 10"""
+            elif "defender" in user_query.lower() and "disable" in user_query.lower():
+                return f"""{index_part} earliest=-7d
+| search (EventCode=5001 OR EventCode=5025 OR "Defender disabled" OR "protection disabled"){company_extract}
+| stats latest(_time) as last_event by host
+| convert ctime(last_event) as Time
+| sort - last_event"""
+            else:
+                return f"""{index_part} earliest=-24h{company_extract}
+| stats count
+| sort - count"""
