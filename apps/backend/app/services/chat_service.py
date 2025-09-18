@@ -58,7 +58,9 @@ class ChatService:
                     print(f"📝 Improved query: {improved_query}")
                     
                     # Step 3: Generate SPL query using improved prompt
-                    result = self.spl_service.generate_spl_query(message, verbose=False)
+                    print(f"🔧 Generating SPL for: '{message}'")
+                    result = self.spl_service.generate_spl_query(message, verbose=True)
+                    print(f"📊 SPL Generation Result - Company: {result.company}, Index: {result.index}, Method: {result.detection_method}")
                     
                     if result.success:
                         response = f"""🔍 **SPL Query Generated**

@@ -366,13 +366,7 @@ class SPLService:
         else:
             result = ' '.join(clean_lines)
         
-        # Fix common SPL syntax issues
-        result = result.strip()
-        
-        # Replace 'limit' with 'head' (Splunk best practice)
-        result = re.sub(r'\|\s*limit\s+(\d+)', r'| head \1', result, flags=re.IGNORECASE)
-        
-        return result
+        return result.strip()
     
     def check_relevance(self, query: str) -> RelevanceCheckResponse:
         """Check if query is Splunk-related"""
@@ -420,7 +414,7 @@ EXTRACT THE FOLLOWING (deduplicate across sources):
 - Statistical functions (count, dc, sum, avg, min, max, percentile if present) and their typical usage contexts.
 - Filtering conditions and operators (AND/OR/IN, match/regex, like, isnull/isnotnull).
 - Time range specs and bucketing (earliest=..., latest=..., @d, bin/timechart span=...).
-- Grouping/sorting/head patterns (stats by <fields>, sort - <field>, head N - NEVER use limit).
+- Grouping/sorting/limit patterns (stats by <fields>, sort - <field>, head/top N).
 - Subsearch/join patterns (e.g., correlating two datasets; history vs today).
 - Visualization commands (timechart, chart) and common parameter shapes.
 - Any COMPLETE example queries present in the sources.
@@ -444,7 +438,7 @@ RETURN FORMAT (clear labeled sections):
 - Stats & Aggregations
 - Filters & Operators
 - Time & Bucketing
-- Grouping/Sorting/Head Commands
+- Grouping/Sorting/Limits
 - Subsearch/Join Patterns
 - Visualization
 - Complete Examples
@@ -830,21 +824,28 @@ Return JSON only:
         
         system_prompt = """You are an expert at detecting cross-company/enterprise-wide queries for Splunk analysis.
 
-CRITICAL: Only classify as cross-company if the query EXPLICITLY requires data from ALL companies/organizations.
+CLASSIFY AS CROSS-COMPANY if the query requires data from ALL companies/organizations:
 
-EXPLICIT CROSS-COMPANY INDICATORS (must be present):
+EXPLICIT CROSS-COMPANY INDICATORS:
 - Clear mentions: "all companies", "enterprise-wide", "organization-wide", "across all organizations"
 - Comparative analysis: "compare across companies", "enterprise trends", "organization-wide patterns"
 - Explicit scope: "every company", "entire organization", "targeting all organizations"
+
+IMPLICIT CROSS-COMPANY INDICATORS (generic security queries):
+- Generic broad security analysis: "Show all failed login attempts", "Find all privilege escalation", "Monitor all suspicious activities"
+- Enterprise-wide threat hunting: "Detect malware", "Find security incidents", "Show threat patterns"
+- General monitoring: "Failed logins", "Authentication failures", "Security events" (without company specification)
+- Baseline analysis: "Top attackers", "Most targeted systems", "Security trends"
 
 SINGLE COMPANY INDICATORS (strong rejection):
 - ANY specific company name: "For SafeBank", "TechNova systems", "HealthPlus", "AirLogix", "GreenEnergy", "EduSmart", "FinServe"
 - Company-specific context: "At [Company]", "[Company] logs", "[Company] systems"
 
-IMPORTANT RULES:
+SCORING RULES:
 1. If ANY company name is mentioned → ALWAYS single company (confidence = 0.1)
-2. Only return cross-company if confidence >= 0.8 AND no company names present
-3. Be very conservative - when in doubt, choose single company
+2. Generic security queries without company context → cross-company (confidence = 0.7)
+3. Explicit cross-company keywords → high confidence (0.9+)
+4. When in doubt about generic queries → favor cross-company for better enterprise visibility
 
 Return ONLY valid JSON:
 {
@@ -878,9 +879,24 @@ Return ONLY valid JSON:
                     print(f"🚫 Company name detected in query, rejecting cross-company classification")
                     return None
                 
-                # Require high confidence for cross-company detection
-                if is_cross_company and confidence >= 0.8:
-                    print(f"✅ LLM cross-company detection: confidence={confidence}, reasoning={reasoning}")
+                # Adaptive confidence threshold based on query characteristics
+                query_lower = user_query.lower()
+                
+                # Lower threshold for obvious security queries
+                if any(keyword in query_lower for keyword in ["failed login", "authentication", "security", "threat", "attack"]):
+                    confidence_threshold = 0.55
+                    threshold_reason = "security_context"
+                # Higher threshold for ambiguous queries
+                elif len(user_query.split()) < 5:
+                    confidence_threshold = 0.75
+                    threshold_reason = "short_query"
+                else:
+                    confidence_threshold = 0.65
+                    threshold_reason = "standard"
+                
+                if is_cross_company and confidence >= confidence_threshold:
+                    print(f"✅ LLM cross-company detection: confidence={confidence} (threshold={confidence_threshold}, reason={threshold_reason})")
+                    print(f"   Reasoning: {reasoning}")
                     return {
                         "company_name": "All Companies",
                         "product_name": "Cross-Company Analysis",
@@ -900,16 +916,21 @@ Return ONLY valid JSON:
         except Exception as e:
             print(f"LLM cross-company detection error: {e}")
             
-        # Fallback to simple pattern matching if LLM fails
+        # Minimal fallback for only the most obvious cases
         q = user_query.lower()
         
-        # Only the most obvious patterns as fallback
-        obvious_patterns = [
+        # Only explicit cross-company mentions (very conservative)
+        explicit_patterns = [
             "all companies", "all organizations", "enterprise-wide", "organization-wide",
-            "across all companies", "across all organizations", "targeting all organizations"
+            "across all companies", "across all organizations"
         ]
         
-        if any(pattern in q for pattern in obvious_patterns):
+        # Check for company names to avoid false positives
+        company_names = [c["company_name"].lower() for c in self.company_data]
+        has_company_name = any(name in q for name in company_names)
+        
+        if not has_company_name and any(pattern in q for pattern in explicit_patterns):
+            print(f"📋 Fallback explicit cross-company pattern matched")
             return {
                 "company_name": "All Companies",
                 "product_name": "Cross-Company Analysis",
@@ -917,58 +938,117 @@ Return ONLY valid JSON:
                 "sourcetype": None,
                 "data_model": [],
                 "confidence_score": 0.90,
-                "method": "fallback_pattern_detection",
-                "company_index": -1,
+                "method": "fallback_explicit_pattern",
                 "is_cross_company": True,
-                "reasoning": "Fallback pattern matching"
+                "reasoning": "Fallback - explicit cross-company keywords detected"
             }
         
         return None
     
     def _detect_generic_queries(self, user_query: str) -> Optional[Dict[str, Any]]:
-        """Detect generic queries that don't specify a company but could benefit from cross-company analysis"""
+        """LLM-based detection for generic queries that could benefit from cross-company analysis"""
         
-        # Generic patterns that often need cross-company analysis
-        generic_patterns = [
-            r"monitor\s+.*\s+(on|across|from)\s+.*servers?",  # "Monitor X on servers"
-            r"show\s+.*\s+(login|authentication|access)\s+attempts?",  # "Show login attempts"  
-            r"find\s+.*\s+(suspicious|malicious|unusual)\s+",  # "Find suspicious activity"
-            r"detect\s+.*\s+(attack|intrusion|threat)",  # "Detect attacks"
-            r"analyze\s+.*\s+(patterns?|trends?|behavior)",  # "Analyze patterns"
-            r"track\s+.*\s+(changes?|modifications?)",  # "Track changes"
-            r"identify\s+.*\s+(systems?|hosts?|users?)\s+with",  # "Identify systems with"
-        ]
-        
-        query_lower = user_query.lower()
-        
-        # Check if query matches generic patterns AND doesn't mention specific company
+        # Quick company mention check first (performance optimization)
         company_names = [c["company_name"].lower() for c in self.company_data]
-        has_company_mention = any(f"for {company}" in query_lower for company in company_names)
+        query_lower = user_query.lower()
+        has_company_mention = any(company in query_lower for company in company_names)
         
         if has_company_mention:
             return None  # Has specific company mention
         
-        # Check for generic patterns
-        is_generic = any(re.search(pattern, query_lower) for pattern in generic_patterns)
+        # LLM-based generic query analysis
+        system_prompt = """You are an expert at analyzing security queries to determine if they would benefit from enterprise-wide (cross-company) analysis.
+
+ANALYZE: Does this query represent a generic security/monitoring request that would naturally need data from ALL systems/companies for comprehensive visibility?
+
+INDICATORS FOR ENTERPRISE-WIDE ANALYSIS:
+- Generic security monitoring: "Show failed logins", "Find suspicious activity", "Detect threats"
+- Broad system analysis: "Monitor servers", "Track changes", "Analyze patterns" 
+- Enterprise-wide visibility: Queries about "systems", "servers", "hosts", "users" (plural)
+- Baseline/trending analysis: "Top attackers", "Most targeted", "Security trends"
+- Threat hunting: "Detect malware", "Find indicators", "Security incidents"
+
+INDICATORS FOR SINGLE-COMPANY (reject):
+- Specific company context already implied
+- Department-specific queries: "HR access", "Finance systems"
+- Location-specific: "Branch office", "Local systems"
+- Very specific technical queries about individual systems
+
+SCORING:
+- High confidence (0.8+): Clear enterprise-wide security analysis
+- Medium confidence (0.6-0.7): Generic queries that could benefit from wider scope
+- Low confidence (<0.6): Too specific or unclear scope
+
+Return JSON only:
+{
+    "needs_enterprise_analysis": true/false,
+    "confidence": 0.0-1.0,
+    "reasoning": "brief explanation",
+    "query_type": "security_monitoring|threat_hunting|system_analysis|baseline_analysis|other"
+}"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Query: {user_query}"}
+        ]
         
-        if is_generic:
-            # Additional check: does it mention systems/servers in plural (suggesting enterprise scope)?
-            enterprise_indicators = ['servers', 'systems', 'hosts', 'machines', 'devices', 'endpoints']
-            has_enterprise_scope = any(indicator in query_lower for indicator in enterprise_indicators)
+        try:
+            response = self.call_model(messages, temperature=0.1)
             
-            if has_enterprise_scope:
-                return {
-                    "company_name": "All Companies",
-                    "product_name": "Cross-Company Analysis", 
-                    "index": "*",
-                    "sourcetype": None,
-                    "data_model": [],
-                    "confidence_score": 0.75,
-                    "method": "generic_cross_company_suggestion",
-                    "company_index": -1,
-                    "is_cross_company": True,
-                    "reasoning": "Generic query with enterprise scope - suggesting cross-company analysis"
-                }
+            # Extract JSON from response
+            json_match = re.search(r'\{[^}]+\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                
+                needs_enterprise = result.get("needs_enterprise_analysis", False)
+                confidence = float(result.get("confidence", 0.5))
+                reasoning = result.get("reasoning", "LLM analysis")
+                query_type = result.get("query_type", "other")
+                
+                # Require reasonable confidence for generic detection
+                if needs_enterprise and confidence >= 0.65:
+                    print(f"✅ LLM generic query detection: confidence={confidence}, type={query_type}")
+                    print(f"   Reasoning: {reasoning}")
+                    
+                    return {
+                        "company_name": "All Companies",
+                        "product_name": "Cross-Company Analysis", 
+                        "index": "*",
+                        "sourcetype": None,
+                        "data_model": [],
+                        "confidence_score": confidence * 0.8,  # Slightly lower than explicit cross-company
+                        "method": "llm_generic_query_detection",
+                        "company_index": -1,
+                        "is_cross_company": True,
+                        "reasoning": f"Generic {query_type} query - {reasoning}"
+                    }
+                else:
+                    print(f"❌ LLM rejected generic cross-company (confidence={confidence}, reasoning={reasoning})")
+                    return None
+                    
+        except Exception as e:
+            print(f"LLM generic query detection error: {e}")
+            
+        # Minimal fallback for obvious cases only
+        obvious_generic_keywords = [
+            "all failed login", "show login attempts", "detect threats", 
+            "find suspicious", "security incidents", "failed logins"
+        ]
+        
+        if any(keyword in query_lower for keyword in obvious_generic_keywords):
+            print(f"📋 Fallback generic pattern matched")
+            return {
+                "company_name": "All Companies",
+                "product_name": "Cross-Company Analysis", 
+                "index": "*",
+                "sourcetype": None,
+                "data_model": [],
+                "confidence_score": 0.70,
+                "method": "fallback_generic_pattern",
+                "company_index": -1,
+                "is_cross_company": True,
+                "reasoning": "Generic security query - fallback pattern matching"
+            }
         
         return None
     
@@ -1042,12 +1122,12 @@ QUERY STRUCTURE:
 2. Add specific search conditions based on request
 3. Apply field normalization with eval/coalesce  
 {company_extraction}4. Use appropriate aggregations (stats, timechart, etc.)
-5. Sort results and use 'head' command for limiting (NEVER use 'limit')
+5. Sort and limit results appropriately
 
 Company Context: {company_name}
 User Request: {query}
 
-Generate ONLY the SPL query (no explanations). Use 'head' command instead of 'limit' for result limiting:"""
+Generate ONLY the SPL query (no explanations):"""
 
             # Determine instruction based on context
             if validated_context['needs_company_extraction']:
