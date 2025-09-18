@@ -366,7 +366,13 @@ class SPLService:
         else:
             result = ' '.join(clean_lines)
         
-        return result.strip()
+        # Fix common SPL syntax issues
+        result = result.strip()
+        
+        # Replace 'limit' with 'head' (Splunk best practice)
+        result = re.sub(r'\|\s*limit\s+(\d+)', r'| head \1', result, flags=re.IGNORECASE)
+        
+        return result
     
     def check_relevance(self, query: str) -> RelevanceCheckResponse:
         """Check if query is Splunk-related"""
@@ -414,7 +420,7 @@ EXTRACT THE FOLLOWING (deduplicate across sources):
 - Statistical functions (count, dc, sum, avg, min, max, percentile if present) and their typical usage contexts.
 - Filtering conditions and operators (AND/OR/IN, match/regex, like, isnull/isnotnull).
 - Time range specs and bucketing (earliest=..., latest=..., @d, bin/timechart span=...).
-- Grouping/sorting/limit patterns (stats by <fields>, sort - <field>, head/top N).
+- Grouping/sorting/head patterns (stats by <fields>, sort - <field>, head N - NEVER use limit).
 - Subsearch/join patterns (e.g., correlating two datasets; history vs today).
 - Visualization commands (timechart, chart) and common parameter shapes.
 - Any COMPLETE example queries present in the sources.
@@ -438,7 +444,7 @@ RETURN FORMAT (clear labeled sections):
 - Stats & Aggregations
 - Filters & Operators
 - Time & Bucketing
-- Grouping/Sorting/Limits
+- Grouping/Sorting/Head Commands
 - Subsearch/Join Patterns
 - Visualization
 - Complete Examples
@@ -1036,12 +1042,12 @@ QUERY STRUCTURE:
 2. Add specific search conditions based on request
 3. Apply field normalization with eval/coalesce  
 {company_extraction}4. Use appropriate aggregations (stats, timechart, etc.)
-5. Sort and limit results appropriately
+5. Sort results and use 'head' command for limiting (NEVER use 'limit')
 
 Company Context: {company_name}
 User Request: {query}
 
-Generate ONLY the SPL query (no explanations):"""
+Generate ONLY the SPL query (no explanations). Use 'head' command instead of 'limit' for result limiting:"""
 
             # Determine instruction based on context
             if validated_context['needs_company_extraction']:
