@@ -1270,6 +1270,298 @@ Return ONLY valid JSON:
         
         return None
     
+    def _get_relevant_fields_for_query(self, user_query: str, company_info: Dict[str, Any], max_fields: int = 15) -> Dict[str, Any]:
+        """Intelligently select relevant fields based on query context"""
+        
+        # Load field mappings from configuration file or database
+        field_mappings = self._load_field_mappings()
+        
+        # Ensure field_mappings is not None
+        if field_mappings is None:
+            field_mappings = {}
+            print("⚠️ Field mappings is None, using empty dict")
+        
+        # Query analysis for context detection
+        query_lower = user_query.lower()
+        
+        # Intelligent category detection
+        relevant_categories = self._detect_query_categories(query_lower)
+        
+        # Build relevant field list
+        selected_fields = {}
+        field_count = 0
+        
+        for category in relevant_categories:
+            if category in field_mappings and field_count < max_fields:
+                category_fields = field_mappings.get(category, {})
+                if category_fields:  # Ensure category_fields is not None/empty
+                    for field_type, fields in category_fields.items():
+                        if fields and field_count < max_fields:  # Ensure fields is not None
+                            # Take top N fields from each type
+                            take_count = min(3, len(fields), max_fields - field_count)
+                            selected_fields[f"{category}_{field_type}"] = fields[:take_count]
+                            field_count += take_count
+        
+        # Add platform-specific fields based on company info
+        platform_fields = self._get_platform_specific_fields(company_info)
+        if platform_fields and field_count < max_fields:
+            selected_fields.update(platform_fields)
+        
+        result = {
+            'relevant_categories': list(relevant_categories) if relevant_categories else [],
+            'selected_fields': selected_fields if selected_fields else {},
+            'field_count': sum(len(fields) for fields in selected_fields.values() if fields) if selected_fields else 0
+        }
+        
+        print(f"🔧 Field selection result: {len(result['relevant_categories'])} categories, {result['field_count']} fields")
+        
+        return result
+    
+    def _load_field_mappings(self, enable_discovery: bool = True) -> Dict[str, Any]:
+        """Load field mappings from configuration with optional dynamic discovery"""
+        
+        # Check cache first
+        try:
+            cached_mappings = self._get_cached_field_mappings()
+            if cached_mappings:
+                return cached_mappings
+        except Exception as e:
+            print(f"Cache check failed: {e}")
+        
+        field_mappings = {}
+        
+        # Try to load from configuration file first
+        config_path = "apps/backend/data/field-mappings.json"
+        try:
+            import os
+            # Try multiple possible paths
+            possible_paths = [
+                "data/field-mappings.json",
+                "apps/backend/data/field-mappings.json", 
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "field-mappings.json")
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    config_path = path
+                    break
+                    
+            if os.path.exists(config_path):
+                import json
+                with open(config_path, 'r') as f:
+                    field_mappings = json.load(f)
+                    print(f"✅ Loaded field mappings from {config_path}")
+            else:
+                print(f"⚠️ Field mappings file not found at any of: {possible_paths}")
+        except Exception as e:
+            print(f"Could not load field mappings: {e}")
+        
+        # If no config file or empty result, use defaults
+        if not field_mappings:
+            print("📋 Using default field mappings")
+            try:
+                field_mappings = self._get_default_field_mappings()
+            except Exception as e:
+                print(f"Default field mappings failed: {e}")
+                field_mappings = {}
+        
+        # Ensure field_mappings is not None
+        if field_mappings is None:
+            print("⚠️ Field mappings is None, initializing empty dict")
+            field_mappings = {}
+        
+        # Optionally enhance with dynamic field discovery
+        if enable_discovery and field_mappings:
+            try:
+                # This could query your actual Splunk environment
+                # For demo purposes, we'll enhance based on company data
+                company_data = getattr(self, 'company_data', [])
+                if company_data:
+                    for company in company_data:
+                        index = company.get('index', '') if company else ''
+                        sourcetype = company.get('sourcetype', '') if company else ''
+                        if index and sourcetype:
+                            discovered = self._discover_fields_from_splunk(index, sourcetype)
+                            if discovered:
+                                # Merge discovered fields with existing mappings
+                                for category, fields in discovered.items():
+                                    if category not in field_mappings:
+                                        field_mappings[category] = {}
+                                    field_mappings[category]['discovered'] = fields
+                                
+            except Exception as e:
+                print(f"Field discovery enhancement failed: {e}")
+        
+        # Cache the result
+        try:
+            self._cache_field_mappings(field_mappings)
+        except Exception as e:
+            print(f"Caching failed: {e}")
+        
+        return field_mappings
+    
+    def _get_default_field_mappings(self) -> Dict[str, Any]:
+        """Return default hardcoded field mappings as fallback"""
+        return {
+            'authentication': {
+                'user_fields': ['TargetUserName', 'User_Name', 'user', 'account', 'dest_user', 'username', 'SubjectUserName', 'Account_Name'],
+                'source_fields': ['Source_Network_Address', 'src_ip', 'src', 'rhost', 'host', 'client_ip', 'IpAddress', 'RemoteAddress'],
+                'auth_fields': ['LogonType', 'AuthenticationPackageName', 'failure_reason', 'status', 'result']
+            },
+            'network': {
+                'source_fields': ['src_ip', 'src', 'source_address', 'client_ip', 'remote_ip'],
+                'dest_fields': ['dest_ip', 'dest', 'target_ip', 'server_ip', 'destination'],
+                'port_fields': ['src_port', 'dest_port', 'port', 'service_port'],
+                'protocol_fields': ['protocol', 'transport', 'ip_protocol']
+            },
+            'system': {
+                'host_fields': ['host', 'computer', 'hostname', 'ComputerName', 'System'],
+                'process_fields': ['process_name', 'ProcessName', 'Image', 'process', 'command'],
+                'service_fields': ['service_name', 'ServiceName', 'service', 'daemon']
+            },
+            'security': {
+                'event_fields': ['EventCode', 'event_id', 'signature', 'alert_name', 'rule_name'],
+                'severity_fields': ['Priority', 'Severity', 'severity', 'priority', 'risk_score'],
+                'category_fields': ['Category', 'event_category', 'type', 'classification']
+            },
+            'powershell': {
+                'command_fields': ['CommandLine', 'command', 'ScriptBlockText', 'script'],
+                'user_fields': ['User', 'user', 'account', 'SubjectUserName'],
+                'process_fields': ['ProcessName', 'ParentProcessName', 'process_name']
+            },
+            'file_system': {
+                'file_fields': ['file_path', 'TargetFilename', 'file_name', 'path'],
+                'operation_fields': ['action', 'operation', 'activity', 'EventType'],
+                'hash_fields': ['file_hash', 'md5', 'sha1', 'sha256', 'hash']
+            }
+        }
+    
+    def _detect_query_categories(self, query_lower: str) -> set:
+        """Detect relevant categories based on query content"""
+        relevant_categories = set()
+        
+        # Load category keywords from config or use defaults
+        category_keywords = {
+            'authentication': ['login', 'auth', 'password', 'logon', 'signin', 'credential'],
+            'network': ['network', 'connection', 'traffic', 'ip', 'port', 'protocol'],
+            'system': ['system', 'process', 'service', 'host', 'computer'],
+            'security': ['security', 'alert', 'threat', 'attack', 'incident', 'malware'],
+            'powershell': ['powershell', 'ps1', 'script', 'command'],
+            'file_system': ['file', 'directory', 'folder', 'document', 'download']
+        }
+        
+        # Detect relevant categories
+        for category, keywords in category_keywords.items():
+            if any(keyword in query_lower for keyword in keywords):
+                relevant_categories.add(category)
+        
+        # Always include basic categories for fallback
+        if not relevant_categories:
+            relevant_categories = {'authentication', 'system', 'security'}
+        
+        return relevant_categories
+    
+    def _get_platform_specific_fields(self, company_info: Dict[str, Any]) -> Dict[str, list]:
+        """Get platform-specific fields based on company info"""
+        platform_fields = {}
+        
+        # Add null check for company_info
+        if not company_info or not isinstance(company_info, dict):
+            print("⚠️ company_info is None or not a dict")
+            return platform_fields
+        
+        index = company_info.get('index', '') or ''
+        sourcetype = company_info.get('sourcetype', '') or ''
+        
+        if '_win' in index or sourcetype == 'WinEventLog':
+            platform_fields = {
+                'windows_events': ['EventCode', 'EventRecordID', 'TimeCreated', 'Computer'],
+                'windows_auth': ['TargetUserName', 'SubjectUserName', 'LogonType', 'IpAddress']
+            }
+        elif '_linux' in index or 'linux' in sourcetype:
+            platform_fields = {
+                'linux_events': ['timestamp', 'hostname', 'process', 'pid'],
+                'linux_auth': ['user', 'rhost', 'tty', 'session']
+            }
+        
+        return platform_fields
+    
+    def _discover_fields_from_splunk(self, index: str, sourcetype: str, limit: int = 100) -> Dict[str, list]:
+        """Dynamically discover fields from Splunk environment (if available)"""
+        
+        # This would be the ideal approach - query Splunk for field discovery
+        discovered_fields = {}
+        
+        try:
+            # Example: Use Splunk REST API to discover fields
+            # discovery_query = f"| rest /services/data/indexes/{index}/sourcetypes/{sourcetype}/fields"
+            
+            # For now, simulate field discovery based on sourcetype patterns
+            if sourcetype == 'WinEventLog':
+                discovered_fields = {
+                    'discovered_windows': [
+                        'EventCode', 'TimeCreated', 'Computer', 'TargetUserName',
+                        'SubjectUserName', 'LogonType', 'IpAddress', 'ProcessName'
+                    ]
+                }
+            elif 'linux' in sourcetype:
+                discovered_fields = {
+                    'discovered_linux': [
+                        'timestamp', 'hostname', 'process', 'pid', 'user',
+                        'message', 'facility', 'severity'
+                    ]
+                }
+            
+            print(f"🔍 Field discovery for {index}/{sourcetype}: {len(discovered_fields)} categories found")
+            
+        except Exception as e:
+            print(f"Field discovery failed: {e}")
+            
+        return discovered_fields
+    
+    def _cache_field_mappings(self, mappings: Dict[str, Any], cache_duration: int = 3600):
+        """Cache field mappings to avoid repeated file I/O"""
+        # Simple in-memory cache implementation
+        import time
+        
+        cache_key = "field_mappings"
+        current_time = time.time()
+        
+        # Store in instance variable (simple cache)
+        if not hasattr(self, '_field_cache'):
+            self._field_cache = {}
+        
+        self._field_cache[cache_key] = {
+            'data': mappings,
+            'timestamp': current_time,
+            'duration': cache_duration
+        }
+    
+    def _get_cached_field_mappings(self) -> Dict[str, Any]:
+        """Get cached field mappings if still valid"""
+        try:
+            import time
+            
+            if not hasattr(self, '_field_cache'):
+                return None
+                
+            cache_key = "field_mappings"
+            cached_data = self._field_cache.get(cache_key)
+            
+            if cached_data and isinstance(cached_data, dict):
+                current_time = time.time()
+                timestamp = cached_data.get('timestamp', 0)
+                duration = cached_data.get('duration', 3600)
+                data = cached_data.get('data')
+                
+                if current_time - timestamp < duration and data is not None:
+                    return data
+                    
+        except Exception as e:
+            print(f"Cache retrieval error: {e}")
+                
+        return None
+
     def _generate_unified_spl_query(self, user_query: str, company: Dict[str, Any], extracted_elements: str = "", qa_pairs: List[Dict] = None) -> str:
         """Generate SPL using unified template with strict index/sourcetype validation"""
         # Enhanced context with cross-company awareness (define early)
@@ -1318,7 +1610,50 @@ Return ONLY valid JSON:
         # Get validated context
         validated_context = _validate_company_context(company)
         
+        # Get relevant fields for this specific query
         try:
+            field_context = self._get_relevant_fields_for_query(user_query, company, max_fields=12)
+        except Exception as e:
+            print(f"⚠️ Field context generation failed: {e}")
+            field_context = {
+                'relevant_categories': ['authentication', 'security', 'system'],
+                'selected_fields': {},
+                'field_count': 0
+            }
+        
+        try:
+            # Generate dynamic field normalization based on query context
+            def _generate_field_guidance(field_context):
+                guidance_lines = [
+                    "CONTEXT-AWARE FIELD NORMALIZATION GUIDELINES:"
+                ]
+                
+                # Add null check for field_context and selected_fields
+                selected_fields = field_context.get('selected_fields', {}) if field_context else {}
+                
+                if selected_fields:
+                    for category, fields in selected_fields.items():
+                        if fields and isinstance(fields, list):  # Ensure fields is a list and not None
+                            category_name = category.replace('_', ' ').title()
+                            field_list = ', '.join(fields)
+                            guidance_lines.append(f"- {category_name}: {field_list}")
+                else:
+                    guidance_lines.append("- Using default field patterns")
+                
+                # Add common coalesce patterns for key field types
+                guidance_lines.extend([
+                    "",
+                    "RECOMMENDED COALESCE PATTERNS:",
+                    "- user := coalesce(<select from user fields above>)",
+                    "- src := coalesce(<select from source fields above>)", 
+                    "- dest := coalesce(<select from dest fields above>)",
+                    "- host := coalesce(<select from host fields above>)"
+                ])
+                
+                return '\n'.join(guidance_lines)
+            
+            field_guidance = _generate_field_guidance(field_context)
+            
             template = """You are an expert Splunk SPL query generator. Create a single, correct, efficient query using standard Splunk search syntax.
 
 CRITICAL REQUIREMENTS:
@@ -1329,19 +1664,21 @@ INDEX FORMAT: Must use EXACT format from index-sourcetype.json:
 MANDATORY INDEX & SOURCETYPE RULES:
 {index_sourcetype_instruction}
 
-FIELD NORMALIZATION STANDARDS:
-- user := coalesce(TargetUserName, User_Name, user, account, dest_user)
-- src := coalesce(Source_Network_Address, src_ip, src, rhost, host)  
+{field_guidance}
+
+PLATFORM-SPECIFIC EVENT PATTERNS:
 - Windows events: Use EventCode (4624=login success, 4625=login failure, 5001/5025=Defender events)
-- Linux events: Use text patterns ("Accepted password", "Failed password", "sudo")
+- Linux events: Use appropriate patterns - structured EventCode fields, text patterns, or log-specific fields
+- Apply normalization based on available fields and data source characteristics
 
 QUERY STRUCTURE:
 1. index={target_index} {sourcetype_clause} earliest=<timeframe>
 2. Add specific search conditions based on request
-3. Apply field normalization with eval/coalesce  
+3. Apply field normalization with eval/coalesce using relevant fields from guidance above
 {company_extraction}4. Use appropriate aggregations (stats, timechart, etc.)
 5. Sort results and use 'head' command for limiting (NEVER use 'limit')
 
+Query Context: {query_categories}
 Company Context: {company_name}
 User Request: {query}
 
@@ -1386,9 +1723,11 @@ Generate ONLY the SPL query (no explanations). Use 'head' command instead of 'li
             
             prompt = template.format(
                 index_sourcetype_instruction=index_instruction,
+                field_guidance=field_guidance,
                 target_index=validated_context['index'],
                 sourcetype_clause=validated_context['sourcetype_clause'],
                 company_extraction=company_extraction,
+                query_categories=', '.join(field_context.get('relevant_categories', []) if field_context else []),
                 company_name=company.get('company_name', 'Unknown'),
                 query=user_query
             ) + qa_examples

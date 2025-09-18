@@ -1,0 +1,149 @@
+{
+  "authentication": {
+    "user_fields": [
+      "TargetUserName", "User_Name", "user", "account", "dest_user", 
+      "username", "SubjectUserName", "Account_Name", "UserName", 
+      "login_name", "identity", "principal"
+    ],
+    "source_fields": [
+      "Source_Network_Address", "src_ip", "src", "rhost", "host", 
+      "client_ip", "IpAddress", "RemoteAddress", "source_address",
+      "origin_ip", "caller_ip"
+    ],
+    "auth_fields": [
+      "LogonType", "AuthenticationPackageName", "failure_reason", 
+      "status", "result", "auth_method", "protocol", "mechanism"
+    ],
+    "time_fields": [
+      "TimeCreated", "timestamp", "_time", "event_time", "log_time"
+    ]
+  },
+  "network": {
+    "source_fields": [
+      "src_ip", "src", "source_address", "client_ip", "remote_ip",
+      "origin_address", "sender_ip"
+    ],
+    "dest_fields": [
+      "dest_ip", "dest", "target_ip", "server_ip", "destination",
+      "receiver_ip", "endpoint_ip"
+    ],
+    "port_fields": [
+      "src_port", "dest_port", "port", "service_port", "target_port",
+      "source_port", "destination_port"
+    ],
+    "protocol_fields": [
+      "protocol", "transport", "ip_protocol", "network_protocol",
+      "service_protocol"
+    ]
+  },
+  "system": {
+    "host_fields": [
+      "host", "computer", "hostname", "ComputerName", "System",
+      "machine_name", "node", "endpoint"
+    ],
+    "process_fields": [
+      "process_name", "ProcessName", "Image", "process", "command",
+      "executable", "binary", "program"
+    ],
+    "service_fields": [
+      "service_name", "ServiceName", "service", "daemon",
+      "application", "component"
+    ],
+    "user_fields": [
+      "user", "username", "account", "owner", "executor"
+    ]
+  },
+  "security": {
+    "event_fields": [
+      "EventCode", "event_id", "signature", "alert_name", "rule_name",
+      "detection_name", "signature_id", "rule_id"
+    ],
+    "severity_fields": [
+      "Priority", "Severity", "severity", "priority", "risk_score",
+      "criticality", "impact", "confidence"
+    ],
+    "category_fields": [
+      "Category", "event_category", "type", "classification",
+      "threat_category", "attack_stage"
+    ],
+    "action_fields": [
+      "action", "disposition", "verdict", "outcome", "status"
+    ]
+  },
+  "powershell": {
+    "command_fields": [
+      "CommandLine", "command", "ScriptBlockText", "script",
+      "powershell_command", "ps_script"
+    ],
+    "user_fields": [
+      "User", "user", "account", "SubjectUserName", "executor"
+    ],
+    "process_fields": [
+      "ProcessName", "ParentProcessName", "process_name",
+      "parent_process", "process_id", "pid"
+    ],
+    "script_fields": [
+      "ScriptBlockText", "script_content", "command_text",
+      "powershell_script"
+    ]
+  },
+  "file_system": {
+    "file_fields": [
+      "file_path", "TargetFilename", "file_name", "path",
+      "filename", "filepath", "document_path"
+    ],
+    "operation_fields": [
+      "action", "operation", "activity", "EventType",
+      "file_action", "access_type"
+    ],
+    "hash_fields": [
+      "file_hash", "md5", "sha1", "sha256", "hash",
+      "checksum", "digest"
+    ],
+    "size_fields": [
+      "file_size", "size", "length", "bytes"
+    ]
+  },
+  "email": {
+    "sender_fields": [
+      "sender", "from", "sender_email", "source_email",
+      "originator", "author"
+    ],
+    "recipient_fields": [
+      "recipient", "to", "recipient_email", "dest_email",
+      "receiver", "target_email"
+    ],
+    "subject_fields": [
+      "subject", "email_subject", "mail_subject", "title"
+    ],
+    "attachment_fields": [
+      "attachment", "attachment_name", "attached_file",
+      "file_attachment"
+    ]
+  },
+  "web": {
+    "url_fields": [
+      "url", "uri", "request_url", "web_url", "link"
+    ],
+    "method_fields": [
+      "method", "http_method", "request_method", "verb"
+    ],
+    "status_fields": [
+      "status_code", "http_status", "response_code", "status"
+    ],
+    "user_agent_fields": [
+      "user_agent", "useragent", "browser", "client"
+    ]
+  },
+  "dns": {
+    "query_fields": [
+      "query", "dns_query", "domain", "hostname", "fqdn"
+    ],
+    "response_fields": [
+      "answer", "dns_answer", "response", "resolved_ip"
+    ],
+    "record_fields": [
+      "record_type", "dns_type", "query_type", "rr_type"
+    ]
+  }
+}
