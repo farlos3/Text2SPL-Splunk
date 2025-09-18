@@ -239,7 +239,7 @@
   },
 
   {
-    "question": "Analyze network connections to external IPs across all companies",
+    "question": "Analyze network connections to external IPs o companies",
     "answer": "index=* (sourcetype=WinEventLog OR sourcetype=syslog OR sourcetype=linux_syslog) earliest=-6h\n| where isnotnull(dest_ip) AND dest_port!=0\n| search NOT (dest_ip=\"10.*\" OR dest_ip=\"192.168.*\" OR dest_ip=\"172.16.*\" OR dest_ip=\"172.17.*\" OR dest_ip=\"172.18.*\" OR dest_ip=\"172.19.*\" OR dest_ip=\"172.2*\" OR dest_ip=\"172.30.*\" OR dest_ip=\"172.31.*\")\n| eval src=coalesce(src_ip, src, host)\n| rex field=index \"(?<company>\\w+)_\"\n| stats count by src dest_ip dest_port company\n| sort - count"
   },
 
