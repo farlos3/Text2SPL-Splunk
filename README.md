@@ -9,8 +9,6 @@
 
 > An intelligent conversational AI assistant that transforms natural language security questions into precise Splunk SPL (Search Processing Language) queries. Built for cybersecurity professionals and SOC analysts to streamline threat hunting and log analysis.
 
-![Text2SPL Demo](https://via.placeholder.com/800x400/1a1a1a/ffffff?text=Text2SPL+Demo+Screenshot)
-
 ## 🌟 Features
 
 ### 🤖 AI-Powered Query Generation
