@@ -9,34 +9,6 @@
 
 > An intelligent conversational AI assistant that transforms natural language security questions into precise Splunk SPL (Search Processing Language) queries. Built for cybersecurity professionals and SOC analysts to streamline threat hunting and log analysis.
 
-## 🌟 Features
-
-### 🤖 AI-Powered Query Generation
-- **Natural Language Processing**: Convert plain English security questions to SPL queries
-- **Context-Aware Responses**: Understands cybersecurity terminology and concepts
-- **Multi-Company Support**: Handles queries across different organizational indices
-- **Field Mapping Intelligence**: Automatically maps security fields across different log sources
-
-### 🔍 Security Use Cases
-- **Authentication Analysis**: Failed logins, brute force detection, privilege escalation
-- **Network Security**: Suspicious connections, port scanning, DNS tunneling
-- **Malware Detection**: PowerShell analysis, file encryption, process injection
-- **Compliance Monitoring**: Administrative changes, audit trails, access violations
-- **Threat Hunting**: APT indicators, lateral movement, data exfiltration
-
-### 🎨 Modern User Interface
-- **Real-time Chat Interface**: Responsive conversation flow with typing indicators
-- **SPL Syntax Highlighting**: Beautiful code formatting for generated queries
-- **Copy-to-Clipboard**: One-click copying of SPL queries
-- **Dark/Light Mode**: Automatic theme switching
-- **Mobile-Responsive**: Works seamlessly across all devices
-
-### ⚡ Performance & Reliability
-- **Fast Response Times**: Optimized AI model integration with Groq API
-- **Error Handling**: Comprehensive error handling with user-friendly messages
-- **Docker Support**: Containerized deployment for easy scaling
-- **Hot Reload**: Development environment with instant code updates
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -87,7 +59,7 @@ npm install
 npm run dev
 ```
 
-## 🏗️ Project Architecture
+## Project Architecture
 
 ```
 Text2SPL-Splunk-/
@@ -178,14 +150,6 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_APP_NAME=Text2SPL Assistant
 ```
 
-## 🛡️ Security Features
-
-- **API Key Management**: Secure handling of AI service credentials
-- **CORS Protection**: Configured cross-origin resource sharing
-- **Input Validation**: Comprehensive request validation with Pydantic
-- **Error Sanitization**: Prevents sensitive information leakage
-- **Rate Limiting**: Built-in protection against API abuse
-
 ## 🧪 Testing
 
 ### Backend Testing
@@ -201,13 +165,6 @@ npm test
 npm run test:e2e
 ```
 
-## 📈 Performance
-
-- **Response Time**: < 2 seconds for most queries
-- **Concurrent Users**: Supports 100+ simultaneous users
-- **Memory Usage**: ~512MB for backend, ~256MB for frontend
-- **Database**: JSON-based training data for fast retrieval
-
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
@@ -217,10 +174,6 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 👥 Team
 
@@ -232,13 +185,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Groq AI** for fast LLM inference
 - **Splunk** for the SPL query language
 - **KBTG** for the internship opportunity
-- **Open Source Community** for the amazing tools and libraries
 
 ## 📞 Support
 
 - **Issues**: [GitHub Issues](https://github.com/farlos3/Text2SPL-Splunk-/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/farlos3/Text2SPL-Splunk-/discussions)
-- **Email**: [Support Email](mailto:support@example.com)
 
 ---
 
