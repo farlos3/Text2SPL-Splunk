@@ -190,12 +190,3 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 - **Issues**: [GitHub Issues](https://github.com/farlos3/Text2SPL-Splunk-/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/farlos3/Text2SPL-Splunk-/discussions)
-
----
-
-<div align="center">
-  <p>Made with ❤️ for the Cybersecurity Community</p>
-  <p>
-    <a href="#top">⬆️ Back to Top</a>
-  </p>
-</div>
