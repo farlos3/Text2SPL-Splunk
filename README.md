@@ -185,8 +185,3 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 - **Groq AI** for fast LLM inference
 - **Splunk** for the SPL query language
 - **KBTG** for the internship opportunity
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/farlos3/Text2SPL-Splunk-/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/farlos3/Text2SPL-Splunk-/discussions)
