@@ -8,14 +8,14 @@
 
 > An intelligent conversational AI assistant that transforms natural language security questions into precise Splunk SPL (Search Processing Language) queries. Built for cybersecurity professionals and SOC analysts to streamline threat hunting and log analysis.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - **Docker & Docker Compose** (Recommended)
 - **Node.js 18+** (for local development)
 - **Python 3.11+** (for local development)
 
-### 🐳 Docker Setup (Recommended)
+### Docker Setup (Recommended)
 
 1. **Clone the repository**
    ```bash
@@ -42,7 +42,7 @@
    - **Backend API**: http://localhost:8000
    - **API Documentation**: http://localhost:8000/docs
 
-### 💻 Local Development
+### Local Development
 
 #### Backend Setup
 ```bash
@@ -62,32 +62,32 @@ npm run dev
 
 ```
 Text2SPL-Splunk-/
-├── 📁 apps/
-│   ├── 📁 backend/              # FastAPI Backend
-│   │   ├── 📁 app/
-│   │   │   ├── 📁 core/         # Configuration & Settings
-│   │   │   ├── 📁 models/       # Pydantic Data Models
-│   │   │   ├── 📁 routers/      # API Route Handlers
-│   │   │   ├── 📁 services/     # Business Logic Layer
-│   │   │   └── 📄 main.py       # FastAPI Application Entry
-│   │   ├── 📁 data/             # Training Data & Examples
-│   │   │   ├── 📄 qa_pairs-normal.json
-│   │   │   ├── 📄 field-mappings.json
-│   │   │   └── 📄 index-sourcetype.json
-│   │   └── 📄 requirements.txt  # Python Dependencies
-│   └── 📁 frontend/             # Next.js Frontend
-│       ├── 📁 src/
-│       │   ├── 📁 app/          # App Router Pages
-│       │   ├── 📁 components/   # React Components
-│       │   ├── 📁 services/     # API Integration
-│       │   └── 📁 types/        # TypeScript Definitions
-│       └── 📄 package.json      # Node.js Dependencies
-├── 📁 docker/                   # Docker Configuration
-│   ├── 📄 backend.Dockerfile
-│   └── 📄 frontend.Dockerfile
-├── 📄 docker-compose.dev.yml    # Development Environment
-├── 📄 docker-compose.yml        # Production Environment
-└── 📄 README.md                 # This File
+├── apps/
+│   ├── backend/              # FastAPI Backend
+│   │   ├── app/
+│   │   │   ├── core/         # Configuration & Settings
+│   │   │   ├── models/       # Pydantic Data Models
+│   │   │   ├── routers/      # API Route Handlers
+│   │   │   ├── services/     # Business Logic Layer
+│   │   │   └── main.py       # FastAPI Application Entry
+│   │   ├── data/             # Training Data & Examples
+│   │   │   ├── qa_pairs-normal.json
+│   │   │   ├── field-mappings.json
+│   │   │   └── index-sourcetype.json
+│   │   └── requirements.txt  # Python Dependencies
+│   └── frontend/             # Next.js Frontend
+│       ├── src/
+│       │   ├── app/          # App Router Pages
+│       │   ├── components/   # React Components
+│       │   ├── services/     # API Integration
+│       │   └── types/        # TypeScript Definitions
+│       └── package.json      # Node.js Dependencies
+├── docker/                   # Docker Configuration
+│   ├── backend.Dockerfile
+│   └── frontend.Dockerfile
+├── docker-compose.dev.yml    # Development Environment
+├── docker-compose.yml        # Production Environment
+└── README.md                 # This File
 ```
 
 ## 📊 Example Queries
@@ -124,7 +124,7 @@ index=* sourcetype=WinEventLog (EventCode=4104 OR EventCode=4103) earliest=-24h
 | sort - count
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -149,7 +149,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_APP_NAME=Text2SPL Assistant
 ```
 
-## 🧪 Testing
+## Testing
 
 ### Backend Testing
 ```bash
@@ -163,24 +163,3 @@ cd apps/frontend
 npm test
 npm run test:e2e
 ```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 👥 Team
-
-- **Development Team**: KBTG Cyber Security Internship Program
-- **Maintainer**: [@farlos3](https://github.com/farlos3)
-
-## 🙏 Acknowledgments
-
-- **Groq AI** for fast LLM inference
-- **Splunk** for the SPL query language
-- **KBTG** for the internship opportunity
