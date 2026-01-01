@@ -90,7 +90,7 @@ Text2SPL-Splunk-/
 └── README.md                 # This File
 ```
 
-## 📊 Example Queries
+## Example Queries
 
 ### Authentication Analysis
 **Input**: "For TechCorp, show all failed logins in the last 24 hours"
