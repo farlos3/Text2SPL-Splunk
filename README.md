@@ -10,11 +10,6 @@
 
 ## Quick Start
 
-### Prerequisites
-- **Docker & Docker Compose** (Recommended)
-- **Node.js 18+** (for local development)
-- **Python 3.11+** (for local development)
-
 ### Docker Setup (Recommended)
 
 1. **Clone the repository**
@@ -147,19 +142,4 @@ LOG_LEVEL=INFO
 # API Configuration
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_APP_NAME=Text2SPL Assistant
-```
-
-## Testing
-
-### Backend Testing
-```bash
-cd apps/backend
-python -m pytest tests/ -v
-```
-
-### Frontend Testing
-```bash
-cd apps/frontend
-npm test
-npm run test:e2e
 ```
